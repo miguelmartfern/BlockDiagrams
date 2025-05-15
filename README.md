@@ -80,7 +80,7 @@ pos = db.add("x_{sum}(t)", kind="mult_combiner", inputs=inputs_pos, position="au
 
 # Rest of the diagram
 pos = db.add("h_1(t)", kind="block", position = pos)
-pos = db.add("mult", kind="2combiner", input_left_text="x_2(t)", input_bottom_text="s(t)", output_text="x_3(t)", operation='mult', position = pos)
+pos = db.add("mult", kind="2combiner", input_left_text="x_2(t)", input_bottom_text="s(t)", output_text="x_3(t)", operation='sum', position = pos)
 pos = db.add("h_2(t)", kind="block", position = pos)
 pos = db.add("y(t)", kind="output", position = pos)
 
