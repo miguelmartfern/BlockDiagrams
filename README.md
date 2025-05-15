@@ -30,25 +30,24 @@ Then simply import the `blockdiag.py` module into your project.
 ## Basic Usage
 
 ```python
-import matplotlib.pyplot as plt
 from blockdiag import DiagramBuilder
 
-builder = DiagramBuilder()
+db = DiagramBuilder(block_length=1, fontsize=16)
 
-# Add input node
-builder.add("input", kind='input', position=(0, 0), text="x")
+# Dibujo del diagrama
+pos = db.add("x(t)", kind="input", position=(0, 0))
+pos = db.add("h_{aa}(t)", kind="block", position = pos)
+pos = db.add("mult", kind="2combiner", input_left_text="x_c(t)", input_bottom_text="p(t)", output_text="x_p(t)", operation='mult', position = pos)
+pos = db.add("C/D", kind="block_uparrow",input_bottom_text="T_s", position = pos)
+pos = db.add("x_d[n]", kind="arrow", position = pos)
+pos = db.add("h_d[n]", kind="block", position = pos)
+pos = db.add("y_d[n]", kind="arrow", position = pos)
+pos = db.add("D/C", kind="block", position = pos)
+pos = db.add("x_p(t)", kind="arrow", position = pos)
+pos = db.add("h_r(t)", kind="block", position = pos)
+pos = db.add("x_r(t)", kind="output", position = pos)
 
-# Add block
-builder.add("block1", kind='block', text="H(z)")
-
-# Add arrow
-builder.add("arrow1", kind='arrow', text=r"y[n]")
-
-# Add output node
-builder.add("output", kind='output', text="y")
-
-# Display the diagram
-builder.show()
+db.show(savepath = "diag1.pdf")
 ```
 
 ---
