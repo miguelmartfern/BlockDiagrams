@@ -384,7 +384,7 @@ class DiagramBuilder:
         self.ax.axis("off")  # opcional
 
         if savepath:
-            self.fig.savefig(savepath, bbox_inches='tight', dpi=self.fig.dpi)
+            self.fig.savefig(savepath, bbox_inches='tight', dpi=self.fig.dpi, transparent=False, facecolor='white')
             print(f"Saved in: {savepath}")
         else:
             plt.show()
