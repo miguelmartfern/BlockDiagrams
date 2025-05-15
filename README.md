@@ -47,8 +47,10 @@ pos = db.add("x_p(t)", kind="arrow", position = pos)
 pos = db.add("h_r(t)", kind="block", position = pos)
 pos = db.add("x_r(t)", kind="output", position = pos)
 
-db.show(savepath = "diag1.pdf")
+db.show(savepath = "diag1.png")
 ```
+
+![Block Diagram](diag1.png)
 
 ---
 
