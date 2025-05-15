@@ -116,7 +116,9 @@ Contributions are welcome! Please open an issue or pull request on GitHub.
 
 ## License
 
-[Specify the license here, e.g., MIT License]
+
+This project is licensed under the [MIT License](LICENSE).
+
 
 ---
 
