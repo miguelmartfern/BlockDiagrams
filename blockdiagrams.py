@@ -46,9 +46,13 @@ class DiagramBuilder:
         - height: vertical height of the block.
         - fontsize: font size of the text inside the block.
         """
-        x, y = initial_position
-        self.ax.add_patch(Rectangle((x, y - height / 2), length, height, edgecolor='black', facecolor='white'))
-        self.ax.text(x + length / 2, y, f"${text}$", ha='center', va='center', fontsize=fontsize)
+        x0, y = initial_position
+        x1 = x0 + length
+
+        self.ax.add_patch(Rectangle((x0, y - height / 2), length, height, edgecolor='black', facecolor='white'))
+        self.ax.text(x0 + length / 2, y, f"${text}$", ha='center', va='center', fontsize=fontsize)
+
+        return [x1, y]
 
     def __draw_block_uparrow__(self, initial_position, text, input_bottom_text, length=1.5, height=1, text_offset=0.1, fontsize=14):
         """
@@ -76,6 +80,8 @@ class DiagramBuilder:
         if input_bottom_text:
             self.ax.text(cx, y - 1.25 * length - text_offset, f"${input_bottom_text}$",
                     ha='center', va='top', fontsize=fontsize)
+        
+        return [x1, y]
 
     def __draw_arrow__(self, initial_position, length, text=None, arrow = True, text_offset=(0, 0.2), fontsize=14):
         """
@@ -92,12 +98,17 @@ class DiagramBuilder:
         # end = (initial_position[0] + length, initial_position[1])
         head_width = 0.15 if arrow else 0
 
-        self.ax.add_patch(FancyArrow(initial_position[0], initial_position[1], length, 0, width=0.01,
+        x0, y = initial_position
+        x1 = x0 + length
+
+        self.ax.add_patch(FancyArrow(x0, y, length, 0, width=0.01,
                                 length_includes_head=True, head_width=head_width, color='black'))
         if text:
-            tx = initial_position[0] + length / 2 + text_offset[0]
-            ty = initial_position[1] + text_offset[1]
+            tx = x0 + length / 2 + text_offset[0]
+            ty = y + text_offset[1]
             self.ax.text(tx, ty, f"${text}$", ha='center', fontsize=fontsize)
+        
+        return [x1, y]
 
     def __draw_io_arrow__(self, initial_position, length=1, text="", io='input', text_offset=0.3, fontsize=14):
         """
@@ -112,39 +123,39 @@ class DiagramBuilder:
         - text_offset: relative x offset for the label position between (0,1).
         - fontsize: font size of the label.
         """
-        x, y = initial_position
+        x0, y = initial_position
+        x1 = x0 + length
+        
         absolute_text_offset = text_offset * length
-        self.ax.add_patch(FancyArrow(x, y, length, 0, width=0.01,
+        self.ax.add_patch(FancyArrow(x0, y, length, 0, width=0.01,
                                 length_includes_head=True, head_width=0.15, color='black'))
         if text:
-            tx = x - absolute_text_offset if io == 'input' else x + length + absolute_text_offset
+            tx = x0 - absolute_text_offset if io == 'input' else x0 + length + absolute_text_offset
             ty = y
             self.ax.text(tx, ty, f"${text}$", ha='center', va='center', fontsize=fontsize)
+        
+        return [x1, y]
 
-    def __draw_2combiner__(self, initial_position, length,
-                        input_left_text=None, input_bottom_text=None, output_text=None,
-                        operation='mult', text_offset=0.1, fontsize=14):
+    def __draw_combiner__(self, initial_position, height=1,
+                        input_text=None, operation='mult', side='bottom', text_offset=0.1, fontsize=14):
         """
         Draws a combiner block: a circle with a multiplication sign (×), sum sign (+) 
-        or substraction sign (-) inside,
-        with input arrows from the left and bottom, and an output arrow to the right.
+        or substraction sign (-) inside.
 
         Parameters:
-        - ax: matplotlib Axes object where the diagram is drawn.
-        - position: (x, y) coordinates of the start of the left input arrow.
-        - length: total horizontal length from input to output.
-        - input_left_text: label for the left input arrow (above the arrow).
-        - input_bottom_text: label for the bottom input arrow (below the arrow).
-        - output_text: label for the right output arrow (above the arrow).
+        - self: matplotlib Axes object where the diagram is drawn.
+        - intial_position: (x, y) coordinates of the starting point.
+        - length: total horizontal length (diameter of the circle).
+        - input_text: label for the bottom input arrow (below or above the arrow).
         - operation: 'mult' for multiplication sign (×), 'sum' for addition sign (+), 'dif' for substraction sign (-).
         - text_offset: vertical offset for input/output labels.
         - fontsize: font size of the labels.
         """
         x0, y = initial_position
-        x1 = x0 + length
+        radius = height / 4
+        x1 = x0 + 2 * radius
         cx = (x0 + x1) / 2
-        radius = length / 10
-
+        
         circle = plt.Circle((cx, y), radius, edgecolor='black', facecolor='white', zorder=2)
         self.ax.add_patch(circle)
 
@@ -169,28 +180,29 @@ class DiagramBuilder:
         else:
             raise ValueError(f"Unknown operation: {operation}. 'operation' must be 'mult', 'sum' or 'dif'.")
 
-        # Left input
-        self.ax.add_patch(FancyArrow(x0, y, cx - x0 - radius, 0, width=0.01,
+        # Side input
+        if side == 'bottom':
+            y_init = y - height - radius
+            y_height = height
+            y_text_pos = y_init - text_offset
+            va = 'top'
+        elif side == 'top':
+            y_init = y + height + radius
+            y_height = - height
+            y_text_pos = y_init + text_offset
+            va = 'bottom'
+        else:
+            raise ValueError(f"Unknown side: {side}. 'side' must be 'bottom' or 'top'.")
+        
+        self.ax.add_patch(FancyArrow(cx, y_init, 0, y_height, width=0.01,
                                 length_includes_head=True, head_width=0.15, color='black'))
-        if input_left_text:
-            self.ax.text(x0 + (cx - x0 - radius) / 2, y + text_offset, f"${input_left_text}$",
-                    ha='center', va='bottom', fontsize=fontsize)
+        if input_text:
+            self.ax.text(cx, y_text_pos, f"${input_text}$",
+                    ha='center', va=va, fontsize=fontsize)
+        
+        return [x1, y]
 
-        # Bottom input
-        self.ax.add_patch(FancyArrow(cx, y - (cx - x0), 0, cx - x0 - radius, width=0.01,
-                                length_includes_head=True, head_width=0.15, color='black'))
-        if input_bottom_text:
-            self.ax.text(cx, y - (cx - x0) - text_offset, f"${input_bottom_text}$",
-                    ha='center', va='top', fontsize=fontsize)
-
-        # Right output
-        self.ax.add_patch(FancyArrow(cx + radius, y, x1 - cx - radius, 0, width=0.01,
-                                length_includes_head=True, head_width=0.15, color='black'))
-        if output_text:
-            self.ax.text(x1 - (x1 - cx - radius) / 2, y + text_offset, f"${output_text}$",
-                    ha='center', va='bottom', fontsize=fontsize)
-
-    def __draw_mult_combiner__(self, initial_position, length, inputs, output_text=None, operation='sum', fontsize=14):
+    def __draw_mult_combiner__(self, initial_position, length, inputs, output_text=None, operation='sum', side='bottom', fontsize=14):
         """
         Dibuja un sumador o multiplicador con múltiples entradas distribuidas desde pi/2 a 3*pi/2
         a lo largo del borde izquierdo de un círculo. Las entradas pueden tener signo.
@@ -281,7 +293,7 @@ class DiagramBuilder:
                 ha='center', va='bottom', fontsize=fontsize
             )
 
-        return [x0, y0]
+        return [x2, y0]
 
     def add(self,name, kind='block', thread='main', position=None, debug=False, **kwargs):
         """
@@ -316,54 +328,53 @@ class DiagramBuilder:
 
         if kind == 'input':
             length=kwargs.get('length', self.block_length)
-            self.__draw_io_arrow__(initial_pos, length=length, text=kwargs.get('text', name),
+            final_pos = self.__draw_io_arrow__(initial_pos, length=length, text=kwargs.get('text', name),
                           io='input', fontsize=self.fontsize)
 
         elif kind == 'arrow':
             length=kwargs.get('length', self.block_length)
-            self.__draw_arrow__(initial_pos, length=length,
+            final_pos = self.__draw_arrow__(initial_pos, length=length,
                        text=kwargs.get('text', name), arrow = True, fontsize=self.fontsize)
 
         elif kind == 'line':
             length=kwargs.get('length', self.block_length)
-            self.__draw_arrow__(initial_pos, length=length,
+            final_pos = self.__draw_arrow__(initial_pos, length=length,
                        text=kwargs.get('text', name), arrow = False, fontsize=self.fontsize)
 
         elif kind == 'block':
             length=kwargs.get('length', self.block_length)
-            self.__draw_block__(initial_pos, text=kwargs.get('text', name),
+            final_pos = self.__draw_block__(initial_pos, text=kwargs.get('text', name),
                        length=length, height=height, fontsize=self.fontsize)
 
         elif kind == 'block_uparrow':
             length=kwargs.get('length', self.block_length)
-            self.__draw_block_uparrow__(initial_pos, text=kwargs.get('text', name),
+            final_pos = self.__draw_block_uparrow__(initial_pos, text=kwargs.get('text', name),
                                input_bottom_text=kwargs.get('input_bottom_text'),
                                length=length, height=height, fontsize=self.fontsize)
 
-        elif kind == '2combiner':
-            length=kwargs.get('length', self.block_length*2.5)
-            self.__draw_2combiner__(initial_pos, length=length,
-                            input_left_text=kwargs.get('input_left_text'),
-                            input_bottom_text=kwargs.get('input_bottom_text'),
-                            output_text=kwargs.get('output_text'), 
-                            operation=kwargs.get('operation'), fontsize=self.fontsize)
+        elif kind == 'combiner':
+            length=kwargs.get('length', self.block_length)
+            final_pos = self.__draw_combiner__(initial_pos, height=length,
+                            input_text=kwargs.get('input_text'),
+                            operation=kwargs.get('operation'), 
+                            side=kwargs.get('side'), fontsize=self.fontsize)
 
         elif kind == 'mult_combiner':
             length=kwargs.get('length', self.block_length*2.5)
-            initial_pos = self.__draw_mult_combiner__(initial_pos, length=length, inputs=kwargs.get('inputs'),
+            final_pos = self.__draw_mult_combiner__(initial_pos, length=length, inputs=kwargs.get('inputs'),
                             output_text=kwargs.get('text', name), 
                             operation=kwargs.get('operation'), fontsize=self.fontsize)
 
         elif kind == 'output':
             length=kwargs.get('length', self.block_length)
-            self.__draw_io_arrow__(initial_pos, length=length, text=kwargs.get('text', name),
+            final_pos = self.__draw_io_arrow__(initial_pos, length=length, text=kwargs.get('text', name),
                           io='output', fontsize=self.fontsize)
 
         else:
             raise ValueError(f"Unknown block type: {kind}")
 
         # Update head position of thread
-        self.thread_positions[thread] = [initial_pos[0] + length, initial_pos[1]]
+        self.thread_positions[thread] = final_pos
 
         if debug:
             self.__print_threads__()

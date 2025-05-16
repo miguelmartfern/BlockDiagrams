@@ -38,7 +38,7 @@ db = DiagramBuilder(block_length=1, fontsize=16)
 # Dibujo del diagrama
 db.add("x(t)", kind="input")
 db.add("h_{aa}(t)", kind="block")
-db.add("mult", kind="2combiner", input_left_text="x_c(t)", input_bottom_text="p(t)", output_text="x_p(t)", operation='mult')
+db.add("mult", kind="combiner", input_text="p(t)", operation='mult', side='bottom')
 db.add("C/D", kind="block_uparrow",input_bottom_text="T_s")
 db.add("x_d[n]", kind="arrow")
 db.add("h_d[n]", kind="block")
@@ -87,7 +87,7 @@ db.add("x_{sum}(t)", kind="mult_combiner", inputs=input_threads, position='auto'
 
 # Resto del diagrama
 db.add("h_1(t)", kind="block")
-db.add("mult", kind="2combiner", input_left_text="x_2(t)", input_bottom_text="s(t)", output_text="x_3(t)", operation='sum')
+db.add("mult", kind="combiner", input_text="s(t)", operation='sum', side='top')
 db.add("h_2(t)", kind="block")
 db.add("y(t)", kind="output")
 
