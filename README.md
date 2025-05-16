@@ -3,6 +3,7 @@
 
 **BlockDiagrams** is a lightweight Python library for drawing horizontal block diagrams using Matplotlib. It simplifies the visual creation of system and signal diagrams with functions to add blocks, arrows, summation nodes, and multipliers.
 
+v1.1
 ---
 
 ## Features
