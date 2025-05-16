@@ -99,17 +99,17 @@ db.show(savepath = "diag2.png")
 
 ## Main Functions
 
-- `DiagramBuilder.add(name, kind, position=None, **kwargs)`: Adds elements to the diagram.
+- `DiagramBuilder.add(name, kind, position=None, thread='main', **kwargs)`: Adds elements to the diagram.
   - `kind`: `'block'`, `'arrow'`, `'input'`, `'output'`, `'2combiner'`, `'mult_combiner'`.
-  - `position`: Coordinates `(x, y)` to place the element.
+  - `position`: Manual or automatic placement of elements.
   - `text`: LaTeX-formatted text to display inside or near the element.
+  - `thread`: branch in diagram.
 
 ---
 
 ## Upcoming Improvements
 
 - Support for vertical orientation.
-- Support for multiple tracks or branches in diagrams.
 - Improved automatic layout and positioning.
 
 ---
