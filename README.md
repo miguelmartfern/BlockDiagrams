@@ -20,7 +20,7 @@
 The library is not yet published on PyPI. You can clone the repository directly:
 
 ```bash
-git clone https://github.com/your_username/blockdiag.git
+git clone https://github.com/miguelmartfern/blockdiag.git
 ```
 
 Then simply import the `blockdiag.py` module into your project.
