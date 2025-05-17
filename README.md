@@ -155,6 +155,8 @@ db.show(savepath = "diag3.png")
   - `position`: Manual or automatic placement of elements.
   - `text`: LaTeX-formatted text to display inside or near the element.
   - `thread`: branch in diagram.
+- `DiagramBuilder.get_position(thread='main')`: Gets actual head position of thread.
+  - `thread`: thread you want to get its position (defaults to main thread).
 
 ---
 
