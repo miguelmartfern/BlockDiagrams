@@ -4,7 +4,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Rectangle, FancyArrow
-from matplotlib.transforms import Bbox
+# from matplotlib.transforms import Bbox
+from matplotlib import transforms
 
 
 # --- DiagramBuilder class ---
@@ -34,7 +35,7 @@ class DiagramBuilder:
 
     # --- Drawing functions ---
 
-    def __draw_block__(self, initial_position, text=None, text_below=None, text_above=None, text_offset=0.1, input_text=None, input_side=None, length=1.5, height=1, fontsize=14, linestyle='-'):
+    def __draw_block__(self, initial_position, text=None, text_below=None, text_above=None, text_offset=0.1, input_text=None, input_side=None, length=1.5, height=1, fontsize=14, linestyle='-', orientation='horizontal'):
         """
         Draws a rectangular block with centered text.
 
@@ -51,44 +52,87 @@ class DiagramBuilder:
         - height: vertical height of the block.
         - fontsize: font size of the text inside the block.
         - linesyle: linestyle of the block edge: '-, '--, ':', '-.'.
+        - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle.
         """
-        x0, y = initial_position
-        x1 = x0 + length
-        cx = (x0 + x1) / 2
+        angle = 0
+        # Determine rotation angle based on orientation
+        if orientation in ['horizontal', 'right']:
+            angle = 0
+        elif orientation == 'left':
+            angle = 180
+        elif orientation in ['vertical', 'down']:
+            angle = -90
+        elif orientation == 'up':
+            angle = 90
+        elif isinstance(orientation, (int, float)):
+            angle = orientation
+        else:
+            angle = 0
+  
+        x_ini, y_ini = initial_position
 
-        self.ax.add_patch(Rectangle((x0, y - height / 2), length, height, edgecolor='black', facecolor='none', linestyle=linestyle))
+        # Bottom-left corner of the block (before rotation)
+        x0 = x_ini
+        y0 = y_ini - height / 2
+
+        # Center of the block (before rotation)
+        cx = x_ini + length / 2
+        cy = y_ini
+
+        # Apply rotation around the connection point (x_ini, y_ini)
+        trans = transforms.Affine2D().rotate_deg_around(x_ini, y_ini, angle) + self.ax.transData   
+
+        self.ax.add_patch(Rectangle((x0, y0), length, height, 
+                                    edgecolor='black', facecolor='none', 
+                                    linestyle=linestyle, transform=trans))
 
         # Draw text inside the block
         if text is not None:
-            self.ax.text(x0 + length / 2, y, f"${text}$", ha='center', va='center', fontsize=fontsize)
+            self.ax.text(cx, cy, f"${text}$", ha='center', va='center', 
+                         fontsize=fontsize, transform=trans, rotation=angle)
+            
         # Draw text above the block
         if text_above is not None:
-            self.ax.text(x0 + length / 2, y + height /2 + text_offset, f"${text_above}$", ha='center', va='bottom', fontsize=fontsize)
+            y_above = y_ini + height / 2 + text_offset
+            self.ax.text(cx, y_above, f"${text_above}$", ha='center', va='center', 
+                         fontsize=fontsize, transform=trans, rotation=angle)
+            
         # Draw text below the block
         if text_below is not None:
-            self.ax.text(x0 + length / 2, y - height /2 - text_offset, f"${text_below}$", ha='center', va='top', fontsize=fontsize)
+            y_below = y_ini - height / 2 - text_offset
+            self.ax.text(cx, y_below, f"${text_below}$", ha='center', va='center', 
+                         fontsize=fontsize, transform=trans, rotation=angle)
 
         if input_side is not None:
             if input_side == 'bottom':
-                y_init = y - 1.25 * height
-                y_height = 0.75 * height
+                arrow_height = 0.75 * height
+                y_init = y0 - arrow_height
                 y_text_pos = y_init - text_offset
-                va = 'top'
+                # va = 'top'
             elif input_side == 'top':
-                y_init = y + 1.25 * height
-                y_height = - 0.75 * height
+                arrow_height = - 0.75 * height
+                y_init = y0 + height - arrow_height
                 y_text_pos = y_init + text_offset
-                va = 'bottom'
+                # va = 'bottom'
             else:
                 raise ValueError(f"Unknown input side: {input_side}. Use 'bottom' or 'top'.")   
 
-            self.ax.add_patch(FancyArrow(cx, y_init, 0, y_height, width=0.01,
-                                    length_includes_head=True, head_width=0.15, color='black'))
+            self.ax.add_patch(FancyArrow(cx, y_init, 0, arrow_height, width=0.01,
+                                    length_includes_head=True, head_width=0.15, 
+                                    color='black', transform=trans))
             if input_text is not None:
-                self.ax.text(cx, y_text_pos, f"${input_text}$",
-                        ha='center', va=va, fontsize=fontsize)
+                self.ax.text(cx, y_text_pos, f"${input_text}$", ha='center', va='center', 
+                             fontsize=fontsize, transform=trans)
 
-        return [x1, y]
+        # Compute rotated output point
+        # Output point respecto to input point (before rotation)
+        out_vector = np.array([length, 0])
+        # Rotation matrix (without translation)
+        rotation_matrix = transforms.Affine2D().rotate_deg(angle).get_matrix()[:2, :2]
+        # Apply rotation to the output vector
+        dx, dy = rotation_matrix @ out_vector
+        # Add the rotated output vector to the initial position
+        return [x_ini + dx, y_ini + dy]
 
     def __draw_arrow__(self, initial_position, length, text=None, arrow = True, text_offset=(0, 0.2), fontsize=14):
         """
@@ -352,9 +396,10 @@ class DiagramBuilder:
             length=kwargs.get('length', self.block_length)
             final_pos = self.__draw_block__(initial_pos, text=kwargs.get('text', name), 
                 text_above=kwargs.get('text_above', None), text_below=kwargs.get('text_below', None),
-                text_offset=kwargs.get('text_offset', 0.1),
+                text_offset=kwargs.get('text_offset', 0.2),
                 input_text=kwargs.get('input_text', None), input_side=kwargs.get('input_side', None),
-                length=length, height=height, fontsize=self.fontsize, linestyle=kwargs.get('linestyle', '-'))
+                length=length, height=height, fontsize=self.fontsize, linestyle=kwargs.get('linestyle', '-'),
+                orientation=kwargs.get('orientation', 'horizontal'))
 
         elif kind == 'combiner':
             length=kwargs.get('length', self.block_length)
