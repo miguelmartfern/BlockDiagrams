@@ -13,7 +13,8 @@ v1.2
 - Include summation and multiplication nodes for system diagrams.
 - Horizontal orientation (left to right).
 - Easy to use and extend for custom diagrams.
-
+- Automatic or manual position of elements
+- Threads for several lines in diagrams.
 
 ## New features
 
