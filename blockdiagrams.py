@@ -34,53 +34,60 @@ class DiagramBuilder:
 
     # --- Drawing functions ---
 
-    def __draw_block__(self, initial_position, text, length=1.5, height=1, fontsize=14):
+    def __draw_block__(self, initial_position, text=None, text_below=None, text_above=None, text_offset=0.1, input_text=None, input_side=None, length=1.5, height=1, fontsize=14, linestyle='-'):
         """
         Draws a rectangular block with centered text.
 
         Parameters:
         - ax: matplotlib Axes object where the diagram is drawn.
-        - position: (x, y) coordinates of the center of the left edge of the block.
-        - text: label to display inside the block.
+        - initial_position: (x, y) coordinates of the center of the left edge of the block.
+        - text: label to display in the block.
+        - text_below: position of the text below the block
+        - text_above: position of the text above the block
+        - text_offset: vertical offset for the text position.
+        - input_text: label for the input arrow (below or above the arrow).
+        - input_side: 'bottom' or 'top' to place the input arrow.
         - length: horizontal length of the block.
         - height: vertical height of the block.
         - fontsize: font size of the text inside the block.
-        """
-        x0, y = initial_position
-        x1 = x0 + length
-
-        self.ax.add_patch(Rectangle((x0, y - height / 2), length, height, edgecolor='black', facecolor='white'))
-        self.ax.text(x0 + length / 2, y, f"${text}$", ha='center', va='center', fontsize=fontsize)
-
-        return [x1, y]
-
-    def __draw_block_uparrow__(self, initial_position, text, input_bottom_text, length=1.5, height=1, text_offset=0.1, fontsize=14):
-        """
-        Draws a rectangular block with an additional vertical arrow input from below.
-
-        Parameters:
-        - ax: matplotlib Axes object where the diagram is drawn.
-        - position: (x, y) coordinates of the center of the left edge of the block.
-        - text: label inside the block.
-        - input_bottom_text: label for the vertical arrow entering from below.
-        - length: horizontal length of the block.
-        - height: vertical height of the block.
-        - text_offset: vertical offset for the bottom input label.
-        - fontsize: font size of the labels.
+        - linesyle: linestyle of the block edge: '-, '--, ':', '-.'.
         """
         x0, y = initial_position
         x1 = x0 + length
         cx = (x0 + x1) / 2
 
-        self.ax.add_patch(Rectangle((x0, y - height / 2), length, height, edgecolor='black', facecolor='white'))
-        self.ax.text(x0 + length / 2, y, f"${text}$", ha='center', va='center', fontsize=fontsize)
+        self.ax.add_patch(Rectangle((x0, y - height / 2), length, height, edgecolor='black', facecolor='none', linestyle=linestyle))
 
-        self.ax.add_patch(FancyArrow(cx, y - 1.25 * length, 0, 1.25 * length - height / 2, width=0.01,
-                                length_includes_head=True, head_width=0.15, color='black'))
-        if input_bottom_text:
-            self.ax.text(cx, y - 1.25 * length - text_offset, f"${input_bottom_text}$",
-                    ha='center', va='top', fontsize=fontsize)
-        
+        # Draw text inside the block
+        if text is not None:
+            self.ax.text(x0 + length / 2, y, f"${text}$", ha='center', va='center', fontsize=fontsize)
+        # Draw text above the block
+        if text_above is not None:
+            self.ax.text(x0 + length / 2, y + height /2 + text_offset, f"${text_above}$", ha='center', va='bottom', fontsize=fontsize)
+        # Draw text below the block
+        if text_below is not None:
+            self.ax.text(x0 + length / 2, y - height /2 - text_offset, f"${text_below}$", ha='center', va='top', fontsize=fontsize)
+
+        if input_side is not None:
+            if input_side == 'bottom':
+                y_init = y - 1.25 * height
+                y_height = 0.75 * height
+                y_text_pos = y_init - text_offset
+                va = 'top'
+            elif input_side == 'top':
+                y_init = y + 1.25 * height
+                y_height = - 0.75 * height
+                y_text_pos = y_init + text_offset
+                va = 'bottom'
+            else:
+                raise ValueError(f"Unknown input side: {input_side}. Use 'bottom' or 'top'.")   
+
+            self.ax.add_patch(FancyArrow(cx, y_init, 0, y_height, width=0.01,
+                                    length_includes_head=True, head_width=0.15, color='black'))
+            if input_text is not None:
+                self.ax.text(cx, y_text_pos, f"${input_text}$",
+                        ha='center', va=va, fontsize=fontsize)
+
         return [x1, y]
 
     def __draw_arrow__(self, initial_position, length, text=None, arrow = True, text_offset=(0, 0.2), fontsize=14):
@@ -137,7 +144,7 @@ class DiagramBuilder:
         return [x1, y]
 
     def __draw_combiner__(self, initial_position, height=1,
-                        input_text=None, operation='mult', side='bottom', text_offset=0.1, fontsize=14):
+                        input_text=None, operation='mult', input_side='bottom', text_offset=0.1, fontsize=14):
         """
         Draws a combiner block: a circle with a multiplication sign (×), sum sign (+) 
         or substraction sign (-) inside.
@@ -181,18 +188,18 @@ class DiagramBuilder:
             raise ValueError(f"Unknown operation: {operation}. 'operation' must be 'mult', 'sum' or 'dif'.")
 
         # Side input
-        if side == 'bottom':
+        if input_side == 'bottom':
             y_init = y - height - radius
             y_height = height
             y_text_pos = y_init - text_offset
             va = 'top'
-        elif side == 'top':
+        elif input_side == 'top':
             y_init = y + height + radius
             y_height = - height
             y_text_pos = y_init + text_offset
             va = 'bottom'
         else:
-            raise ValueError(f"Unknown side: {side}. 'side' must be 'bottom' or 'top'.")
+            raise ValueError(f"Unknown input_side: {input_side}. 'input_side' must be 'bottom' or 'top'.")
         
         self.ax.add_patch(FancyArrow(cx, y_init, 0, y_height, width=0.01,
                                 length_includes_head=True, head_width=0.15, color='black'))
@@ -343,21 +350,18 @@ class DiagramBuilder:
 
         elif kind == 'block':
             length=kwargs.get('length', self.block_length)
-            final_pos = self.__draw_block__(initial_pos, text=kwargs.get('text', name),
-                       length=length, height=height, fontsize=self.fontsize)
-
-        elif kind == 'block_uparrow':
-            length=kwargs.get('length', self.block_length)
-            final_pos = self.__draw_block_uparrow__(initial_pos, text=kwargs.get('text', name),
-                               input_bottom_text=kwargs.get('input_bottom_text'),
-                               length=length, height=height, fontsize=self.fontsize)
+            final_pos = self.__draw_block__(initial_pos, text=kwargs.get('text', name), 
+                text_above=kwargs.get('text_above', None), text_below=kwargs.get('text_below', None),
+                text_offset=kwargs.get('text_offset', 0.1),
+                input_text=kwargs.get('input_text', None), input_side=kwargs.get('input_side', None),
+                length=length, height=height, fontsize=self.fontsize, linestyle=kwargs.get('linestyle', '-'))
 
         elif kind == 'combiner':
             length=kwargs.get('length', self.block_length)
             final_pos = self.__draw_combiner__(initial_pos, height=length,
                             input_text=kwargs.get('input_text'),
                             operation=kwargs.get('operation'), 
-                            side=kwargs.get('side'), fontsize=self.fontsize)
+                            input_side=kwargs.get('input_side'), fontsize=self.fontsize)
 
         elif kind == 'mult_combiner':
             length=kwargs.get('length', self.block_length*2.5)
@@ -379,6 +383,14 @@ class DiagramBuilder:
         if debug:
             self.__print_threads__()
 
+    def get_position(self, thread='main'):
+        """
+        Returns the current position of the specified thread.
+        """
+        if thread in self.thread_positions:
+            return self.thread_positions[thread]
+        else:
+            raise ValueError(f"Thread '{thread}' not found.")
 
     def get_bbox(self):
         return self.ax.dataLim

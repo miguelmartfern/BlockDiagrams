@@ -3,7 +3,7 @@
 
 **BlockDiagrams** is a lightweight Python library for drawing horizontal block diagrams using Matplotlib. It simplifies the visual creation of system and signal diagrams with functions to add blocks, arrows, summation nodes, and multipliers.
 
-v1.1.1
+v1.2
 ---
 
 ## Features
@@ -13,7 +13,24 @@ v1.1.1
 - Include summation and multiplication nodes for system diagrams.
 - Horizontal orientation (left to right).
 - Easy to use and extend for custom diagrams.
+- Automatic or manual position of elements
+- Threads for several lines in diagrams.
 
+## New features
+
+v1.2:
+- 'block' allows bottom and top inputs.
+- 'block' allows center, above or below text.
+- 'block' allows linestyles.
+- 'block_uparrow' unified within 'block'.
+- New get_position() method.
+
+v1.1:
+- Threads feature added.
+- 'combiner' and 'mult_combiner' modified not to include io arrows.
+
+v1.0:
+- Initial version.
 ---
 
 ## Installation
@@ -60,6 +77,39 @@ db.show(savepath = "diag1.png")
 
 ```python
 from blockdiagrams import DiagramBuilder
+
+db = DiagramBuilder(block_length=1, fontsize=16)
+
+# Dibujo del diagrama
+db.add("x(t)", kind="input")
+db.add("h_{aa}(t)", kind="block")
+db.add("x_c(t)", kind="arrow", length=2)
+left_pos = db.get_position()
+db.add("mult", kind="combiner", input_text="p(t)", operation='mult', input_side='bottom')
+db.add("x_p(t)", kind="arrow")
+db.add("C/D", kind="block", input_text="T_s", input_side='bottom')
+db.add("x_d[n]", kind="arrow")
+db.add("h_d[n]", kind="block")
+db.add("y_d[n]", kind="arrow")
+db.add("D/C", kind="block")
+db.add("y_p(t)", kind="arrow")
+db.add("h_r(t)", kind="block")
+right_pos = db.get_position()
+db.add("x_r(t)", kind="output")
+
+# Calculation of position and size of dashed block h_c(t)
+position=(left_pos[0]-0.5,left_pos[1]-0.5)
+length=right_pos[0]-left_pos[0]+1
+height=2.5
+db.add("h_c(t)", kind="block", text=None, text_below="h_c(t)", position=position, length=length, height=height, linestyle='--')
+
+db.show()
+```
+
+![Block Diagram](diag2.png)
+
+```python
+from blockdiagrams import DiagramBuilder
 import numpy as np
 
 db = DiagramBuilder(block_length=1, fontsize=16)
@@ -91,20 +141,22 @@ db.add("mult", kind="combiner", input_text="s(t)", operation='sum', side='top')
 db.add("h_2(t)", kind="block")
 db.add("y(t)", kind="output")
 
-db.show(savepath = "diag2.png")
+db.show(savepath = "diag3.png")
 ```
 
-![Block Diagram](diag2.png)
+![Block Diagram](diag3.png)
 
 ---
 
 ## Main Functions
 
 - `DiagramBuilder.add(name, kind, position=None, thread='main', **kwargs)`: Adds elements to the diagram.
-  - `kind`: `'block'`, `'arrow'`, `'input'`, `'output'`, `'2combiner'`, `'mult_combiner'`.
+  - `kind`: `'block'`, `'arrow'`, `'input'`, `'output'`, `'combiner'`, `'mult_combiner'`.
   - `position`: Manual or automatic placement of elements.
   - `text`: LaTeX-formatted text to display inside or near the element.
   - `thread`: branch in diagram.
+- `DiagramBuilder.get_position(thread='main')`: Gets actual head position of thread.
+  - `thread`: thread you want to get its position (defaults to main thread).
 
 ---
 
