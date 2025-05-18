@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib.patches import Rectangle, FancyArrow
 # from matplotlib.transforms import Bbox
 from matplotlib import transforms
-
+from matplotlib.text import Text
 
 # --- DiagramBuilder class ---
 
@@ -17,13 +17,14 @@ class DiagramBuilder:
     Keeps track of horizontal position and allows adding components
     like blocks, arrows, multipliers, and input/output signals in order.
     """
-    def __init__(self, block_length=1.0, fontsize=20):
+    def __init__(self, block_length=1.0, block_height=1.0, fontsize=20):
         self.fig, self.ax = plt.subplots()
         # self.ax.set_xlim(*xlim)
         # self.ax.set_ylim(*ylim)
         self.ax.axis('off')  # Hide axes
         self.fontsize = fontsize
         self.block_length = block_length
+        self.block_height = block_height
         # self.spacing = spacing
         self.thread_positions = {}
         self.thread_positions['main'] = [0, 0]
@@ -33,7 +34,60 @@ class DiagramBuilder:
             print(thread, ": ", self.thread_positions[thread])
 
 
+    # --- Helper functions ---
+
+    def __get_bbox__(self):
+        return self.ax.dataLim
+    
+    def __get_output_pos__(self, init_pos, outvector, angle):
+        """
+        Compute rotated output point
+
+        Parameters:
+        - init_pos: initial position of the block
+        - outvector: output vector before rotation (respecto to init_pos)
+        - angle: rotation angle in degrees
+        """
+
+        # Output point respect to input point (before rotation)
+        out_vector = np.array(outvector)
+        # Rotation matrix (without translation)
+        rotation_matrix = transforms.Affine2D().rotate_deg(angle).get_matrix()[:2, :2]
+        # Apply rotation to the output vector
+        dx, dy = rotation_matrix @ out_vector
+        # Add the rotated output vector to the initial position
+        return [init_pos[0] + dx, init_pos[1] + dy]
+
     # --- Drawing functions ---
+
+    def __draw_rotated_text__(self, anchor_point, text, angle, ha='center', va='center',
+                      fontsize=16, offset=(0, 0)):
+        """
+        Draws text rotated around the anchor point (x, y) with optional offset.
+
+        Parameters:
+        - ax: matplotlib Axes object.
+        - anchor_point: coordinates of the anchor point.
+        - text: string to display.
+        - angle: rotation angle in degrees.
+        - ha, va: horizontal and vertical alignment.
+        - fontsize: font size.
+        - offset: tuple (dx, dy) in data coordinates, before rotation.
+        """
+        # Apply rotation to the offset vector
+        dx, dy = offset
+        offset_vec = np.array([dx, dy])
+        rot_matrix = transforms.Affine2D().rotate_deg(angle).get_matrix()[:2, :2]
+        dx_rot, dy_rot = rot_matrix @ offset_vec
+
+        # Compute final position
+        tx = anchor_point[0] + dx_rot
+        ty = anchor_point[1] + dy_rot
+
+        # Draw text with angle, rotating around anchor point
+        self.ax.text(tx, ty, f"${text}$", ha=ha, va=va, fontsize=fontsize,
+                rotation=angle, rotation_mode='anchor', transform=self.ax.transData)
+
 
     def __draw_block__(self, initial_position, text=None, text_below=None, text_above=None, text_offset=0.1, input_text=None, input_side=None, length=1.5, height=1, fontsize=14, linestyle='-', orientation='horizontal'):
         """
@@ -54,6 +108,26 @@ class DiagramBuilder:
         - linesyle: linestyle of the block edge: '-, '--, ':', '-.'.
         - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle.
         """
+        # Parameters validation
+        if input_side not in (None, 'top', 'bottom'):
+            raise ValueError(f"Invalid input_side: {input_side}. Use 'top' or 'bottom'.")
+        if orientation not in (None, 'horizontal', 'vertical', 'up', 'down', 'left', 'right'):
+            if isinstance(orientation, (int, float)):
+                pass
+            else:
+                raise ValueError(f"Invalid orientation: {orientation}. Use 'horizontal', 'vertical', 'up', 'down', 'left', or 'right'.")
+        if linestyle not in (None, '-', '--', ':', '-.', 'solid', 'dashed', 'dotted', 'dashdot'):
+            raise ValueError(f"Invalid linestyle: {linestyle}. Use '-', '--', ':', '-.', 'solid', 'dashed', 'dotted', or 'dashdot'.")
+        if not isinstance(length, (int, float)) or length <= 0:
+            raise ValueError(f"Invalid length: {length}. Length must be a positive number.")
+        if not isinstance(height, (int, float)) or height <= 0:
+            raise ValueError(f"Invalid height: {height}. Height must be a positive number.")
+        if not isinstance(text_offset, (int, float)):
+            raise ValueError(f"Invalid text_offset: {text_offset}. Text offset must be a number.")
+        if not isinstance(fontsize, (int, float)):
+            raise ValueError(f"Invalid fontsize: {fontsize}. Font size must be a number.")
+        
+        
         angle = 0
         # Determine rotation angle based on orientation
         if orientation in ['horizontal', 'right']:
@@ -88,32 +162,33 @@ class DiagramBuilder:
 
         # Draw text inside the block
         if text is not None:
-            self.ax.text(cx, cy, f"${text}$", ha='center', va='center', 
-                         fontsize=fontsize, transform=trans, rotation=angle)
+            offset_vector = np.array([length / 2, 0])
+            self.__draw_rotated_text__(initial_position, text, angle=angle,
+                  ha='center', va='center', offset=offset_vector)
             
         # Draw text above the block
         if text_above is not None:
-            y_above = y_ini + height / 2 + text_offset
-            self.ax.text(cx, y_above, f"${text_above}$", ha='center', va='center', 
-                         fontsize=fontsize, transform=trans, rotation=angle)
+            offset_vector = np.array([length / 2, height / 2 + text_offset])
+            self.__draw_rotated_text__(initial_position, text_above, angle=angle,
+                  ha='center', va='bottom', offset=offset_vector)
             
         # Draw text below the block
         if text_below is not None:
-            y_below = y_ini - height / 2 - text_offset
-            self.ax.text(cx, y_below, f"${text_below}$", ha='center', va='center', 
-                         fontsize=fontsize, transform=trans, rotation=angle)
+            offset_vector = np.array([length / 2, - height / 2 - text_offset])
+            self.__draw_rotated_text__(initial_position, text_below, angle=angle,
+                  ha='center', va='top', offset=offset_vector)
 
         if input_side is not None:
             if input_side == 'bottom':
                 arrow_height = 0.75 * height
                 y_init = y0 - arrow_height
-                y_text_pos = y_init - text_offset
-                # va = 'top'
+                offset_vector = np.array([length / 2, - height /2 - arrow_height - text_offset])
+                va = 'top'
             elif input_side == 'top':
                 arrow_height = - 0.75 * height
                 y_init = y0 + height - arrow_height
-                y_text_pos = y_init + text_offset
-                # va = 'bottom'
+                offset_vector = np.array([length / 2, height /2 - arrow_height + text_offset])
+                va = 'bottom'
             else:
                 raise ValueError(f"Unknown input side: {input_side}. Use 'bottom' or 'top'.")   
 
@@ -121,20 +196,14 @@ class DiagramBuilder:
                                     length_includes_head=True, head_width=0.15, 
                                     color='black', transform=trans))
             if input_text is not None:
-                self.ax.text(cx, y_text_pos, f"${input_text}$", ha='center', va='center', 
-                             fontsize=fontsize, transform=trans)
+                self.__draw_rotated_text__(initial_position, input_text, angle=angle,
+                    ha='center', va=va, offset=offset_vector)
 
         # Compute rotated output point
-        # Output point respecto to input point (before rotation)
-        out_vector = np.array([length, 0])
-        # Rotation matrix (without translation)
-        rotation_matrix = transforms.Affine2D().rotate_deg(angle).get_matrix()[:2, :2]
-        # Apply rotation to the output vector
-        dx, dy = rotation_matrix @ out_vector
-        # Add the rotated output vector to the initial position
-        return [x_ini + dx, y_ini + dy]
+        x_out, y_out = self.__get_output_pos__(initial_position, [length, 0], angle)
+        return [x_out, y_out]
 
-    def __draw_arrow__(self, initial_position, length, text=None, arrow = True, text_offset=(0, 0.2), fontsize=14):
+    def __draw_arrow__(self, initial_position, length, text=None, text_position = 'above', arrow = True, text_offset=0.2, fontsize=14, orientation='horizontal'):
         """
         Draws a horizontal arrow with optional label.
 
@@ -149,43 +218,57 @@ class DiagramBuilder:
         # end = (initial_position[0] + length, initial_position[1])
         head_width = 0.15 if arrow else 0
 
-        x0, y = initial_position
-        x1 = x0 + length
+        angle = 0
+        # Determine rotation angle based on orientation
+        if orientation in ['horizontal', 'right']:
+            angle = 0
+        elif orientation == 'left':
+            angle = 180
+        elif orientation in ['vertical', 'down']:
+            angle = -90
+        elif orientation == 'up':
+            angle = 90
+        elif isinstance(orientation, (int, float)):
+            angle = orientation
+        else:
+            angle = 0
 
-        self.ax.add_patch(FancyArrow(x0, y, length, 0, width=0.01,
-                                length_includes_head=True, head_width=head_width, color='black'))
+        x_ini, y_ini = initial_position
+
+        # Center of the block (before rotation)
+        cx = x_ini + length / 2
+        cy = y_ini
+
+        # x0, y = initial_position
+        # x1 = x0 + length
+
+        # Apply rotation around the connection point (x_ini, y_ini)
+        trans = transforms.Affine2D().rotate_deg_around(x_ini, y_ini, angle) + self.ax.transData   
+
+
+        self.ax.add_patch(FancyArrow(x_ini, y_ini, length, 0, width=0.01,
+                                length_includes_head=True, head_width=head_width, 
+                                color='black', transform=trans))
         if text:
-            tx = x0 + length / 2 + text_offset[0]
-            ty = y + text_offset[1]
-            self.ax.text(tx, ty, f"${text}$", ha='center', fontsize=fontsize)
-        
-        return [x1, y]
+            # Offset en coordenadas no rotadas
+            if text_position == 'before':
+                ha, va = 'right', 'center'
+                offset_vector = np.array([-text_offset, 0])
+            elif text_position == 'after':
+                ha, va = 'left', 'center'
+                offset_vector = np.array([length + text_offset, 0])
+            elif text_position == 'above':
+                ha, va = 'center', 'bottom'
+                offset_vector = np.array([length / 2, text_offset])
+            else:
+                raise ValueError(f"Unknown text_position: {text_position}")
 
-    def __draw_io_arrow__(self, initial_position, length=1, text="", io='input', text_offset=0.3, fontsize=14):
-        """
-        Draws an input/output horizontal arrow with a label.
-
-        Parameters:
-        - ax: matplotlib Axes object where the diagram is drawn.
-        - position: (x, y) coordinates where the arrow starts.
-        - length: horizontal length of the arrow.
-        - text: label for the arrow.
-        - io: 'input' or 'output' to place the label at the beginning or end.
-        - text_offset: relative x offset for the label position between (0,1).
-        - fontsize: font size of the label.
-        """
-        x0, y = initial_position
-        x1 = x0 + length
+            self.__draw_rotated_text__(initial_position, text, angle=angle,
+                  ha=ha, va=va, offset=offset_vector)
         
-        absolute_text_offset = text_offset * length
-        self.ax.add_patch(FancyArrow(x0, y, length, 0, width=0.01,
-                                length_includes_head=True, head_width=0.15, color='black'))
-        if text:
-            tx = x0 - absolute_text_offset if io == 'input' else x0 + length + absolute_text_offset
-            ty = y
-            self.ax.text(tx, ty, f"${text}$", ha='center', va='center', fontsize=fontsize)
-        
-        return [x1, y]
+        # Compute rotated output point
+        x_out, y_out = self.__get_output_pos__(initial_position, [length, 0], angle)
+        return [x_out, y_out]
 
     def __draw_combiner__(self, initial_position, height=1,
                         input_text=None, operation='mult', input_side='bottom', text_offset=0.1, fontsize=14):
@@ -377,29 +460,59 @@ class DiagramBuilder:
             else:
                 initial_pos = [0, 0]
 
-        if kind == 'input':
-            length=kwargs.get('length', self.block_length)
-            final_pos = self.__draw_io_arrow__(initial_pos, length=length, text=kwargs.get('text', name),
-                          io='input', fontsize=self.fontsize)
+        if kind == 'arrow':
+            # Default arguments
+            default_kwargs = {
+                'text': name,
+                'text_position': 'above',
+                'arrow': True,
+                'text_offset': 0.1,
+                'length': self.block_length,
+                'fontsize': self.fontsize,
+                'orientation': 'horizontal'
+            }
 
-        elif kind == 'arrow':
-            length=kwargs.get('length', self.block_length)
-            final_pos = self.__draw_arrow__(initial_pos, length=length,
-                       text=kwargs.get('text', name), arrow = True, fontsize=self.fontsize)
+            # Overrides default arguments with provided ones
+            block_args = {**default_kwargs, **kwargs}
+
+            # Function call
+            final_pos = self.__draw_arrow__(initial_pos, **block_args)
 
         elif kind == 'line':
-            length=kwargs.get('length', self.block_length)
-            final_pos = self.__draw_arrow__(initial_pos, length=length,
-                       text=kwargs.get('text', name), arrow = False, fontsize=self.fontsize)
+            # Default arguments
+            default_kwargs = {
+                'text': name,
+                'text_position': 'above',
+                'arrow': False,
+                'text_offset': 0.1,
+                'length': self.block_length,
+                'fontsize': self.fontsize,
+                'orientation': 'horizontal'
+            }
+            # Overrides default arguments with provided ones
+            block_args = {**default_kwargs, **kwargs}
+            # Function call
+            final_pos = self.__draw_arrow__(initial_pos, **block_args)
 
         elif kind == 'block':
-            length=kwargs.get('length', self.block_length)
-            final_pos = self.__draw_block__(initial_pos, text=kwargs.get('text', name), 
-                text_above=kwargs.get('text_above', None), text_below=kwargs.get('text_below', None),
-                text_offset=kwargs.get('text_offset', 0.2),
-                input_text=kwargs.get('input_text', None), input_side=kwargs.get('input_side', None),
-                length=length, height=height, fontsize=self.fontsize, linestyle=kwargs.get('linestyle', '-'),
-                orientation=kwargs.get('orientation', 'horizontal'))
+            # Default arguments
+            default_kwargs = {
+                'text': name,
+                'text_above': None,
+                'text_below': None,
+                'text_offset': 0.1,
+                'input_text': None,
+                'input_side': None,
+                'length': self.block_length,
+                'height': self.block_height,
+                'fontsize': self.fontsize,
+                'linestyle': '-',
+                'orientation': 'horizontal'
+            }
+            # Overrides default arguments with provided ones
+            block_args = {**default_kwargs, **kwargs}
+            # Function call
+            final_pos = self.__draw_block__(initial_pos, **block_args)
 
         elif kind == 'combiner':
             length=kwargs.get('length', self.block_length)
@@ -437,8 +550,6 @@ class DiagramBuilder:
         else:
             raise ValueError(f"Thread '{thread}' not found.")
 
-    def get_bbox(self):
-        return self.ax.dataLim
         
     def show(self, margin=0.5, scale=1.0, savepath=None):
         """
@@ -449,7 +560,7 @@ class DiagramBuilder:
         - scale: factor de escala aplicado al tamaño de la imagen.
         - savepath: si se proporciona, guarda la figura en lugar de mostrarla.
         """
-        bbox = self.get_bbox()
+        bbox = self.__get_bbox__()
         if bbox is None:
             plt.show()
             return
