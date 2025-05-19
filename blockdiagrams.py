@@ -60,8 +60,8 @@ class DiagramBuilder:
 
     # --- Drawing functions ---
 
-    def __draw_rotated_text__(self, anchor_point, text, angle, ha='center', va='center',
-                      fontsize=16, offset=(0, 0)):
+    def __draw_rotated_text__(self, anchor_point, text, angle, 
+                      ha='center', va='center', fontsize=16, offset=(0, 0)):
         """
         Draws text rotated around the anchor point (x, y) with optional offset.
 
@@ -89,9 +89,10 @@ class DiagramBuilder:
                 rotation=angle, rotation_mode='anchor', transform=self.ax.transData)
 
 
-    def __draw_block__(self, initial_position, text=None, text_below=None, text_above=None, text_offset=0.1, 
-                       input_text=None, input_side=None, length=1.5, height=1, fontsize=14, linestyle='-', 
-                       orientation='horizontal'):
+    def __draw_block__(self, initial_position, text=None, text_below=None, 
+                       text_above=None, text_offset=0.1, input_text=None, 
+                       input_side=None, length=1.5, height=1, fontsize=14, 
+                       linestyle='-', orientation='horizontal'):
         """
         Draws a rectangular block with centered text.
 
@@ -145,18 +146,18 @@ class DiagramBuilder:
         else:
             angle = 0
   
-        x_ini, y_ini = initial_position
+        x_in, y_in = initial_position
 
         # Bottom-left corner of the block (before rotation)
-        x0 = x_ini
-        y0 = y_ini - height / 2
+        x0 = x_in
+        y0 = y_in - height / 2
 
         # Center of the block (before rotation)
-        cx = x_ini + length / 2
-        cy = y_ini
+        cx = x_in + length / 2
+        cy = y_in
 
         # Apply rotation around the connection point (x_ini, y_ini)
-        trans = transforms.Affine2D().rotate_deg_around(x_ini, y_ini, angle) + self.ax.transData   
+        trans = transforms.Affine2D().rotate_deg_around(x_in, y_in, angle) + self.ax.transData   
 
         self.ax.add_patch(Rectangle((x0, y0), length, height, 
                                     edgecolor='black', facecolor='none', 
@@ -205,8 +206,9 @@ class DiagramBuilder:
         x_out, y_out = self.__get_output_pos__(initial_position, [length, 0], angle)
         return [x_out, y_out]
 
-    def __draw_arrow__(self, initial_position, length, text=None, text_position = 'above', arrow = True, 
-                       text_offset=0.2, fontsize=14, orientation='horizontal'):
+    def __draw_arrow__(self, initial_position, length, text=None, 
+                       text_position = 'above', arrow = True, text_offset=0.2, 
+                       fontsize=14, orientation='horizontal'):
         """
         Draws a horizontal arrow with optional label.
 
@@ -237,20 +239,20 @@ class DiagramBuilder:
         else:
             angle = 0
 
-        x_ini, y_ini = initial_position
+        x_in, y_in = initial_position
 
         # Center of the block (before rotation)
-        cx = x_ini + length / 2
-        cy = y_ini
+        cx = x_in + length / 2
+        cy = y_in
 
         # x0, y = initial_position
         # x1 = x0 + length
 
         # Apply rotation around the connection point (x_ini, y_ini)
-        trans = transforms.Affine2D().rotate_deg_around(x_ini, y_ini, angle) + self.ax.transData   
+        trans = transforms.Affine2D().rotate_deg_around(x_in, y_in, angle) + self.ax.transData   
 
 
-        self.ax.add_patch(FancyArrow(x_ini, y_ini, length, 0, width=0.01,
+        self.ax.add_patch(FancyArrow(x_in, y_in, length, 0, width=0.01,
                                 length_includes_head=True, head_width=head_width, 
                                 color='black', transform=trans))
         if text:
@@ -275,14 +277,13 @@ class DiagramBuilder:
         return [x_out, y_out]
 
     def __draw_combiner__(self, initial_position, height=1,
-                        input_text=None, operation='mult', input_side='bottom', text_offset=0.1, fontsize=14,
-                        orientation='horizontal'):
+                        input_text=None, operation='mult', input_side='bottom', 
+                        text_offset=0.1, fontsize=14, orientation='horizontal'):
         """
         Draws a combiner block: a circle with a multiplication sign (×), sum sign (+) 
         or substraction sign (-) inside.
 
         Parameters:
-        - self: matplotlib Axes object where the diagram is drawn.
         - intial_position: (x, y) coordinates of the starting point.
         - length: total horizontal length (diameter of the circle).
         - input_text: label for the bottom input arrow (below or above the arrow).
@@ -306,19 +307,15 @@ class DiagramBuilder:
         else:
             angle = 0
 
-        x_ini, y_ini = initial_position
+        x_in, y_in = initial_position
 
         radius = height / 4
         # Center of the block (before rotation)
-        cx = x_ini + radius
-        cy = y_ini
+        cx = x_in + radius
+        cy = y_in
 
-        # x0, y = initial_position
-        # x1 = x0 + 2 * radius
-        # cx = (x0 + x1) / 2
-        
         # Apply rotation around the connection point (x_ini, y_ini)
-        trans = transforms.Affine2D().rotate_deg_around(x_ini, y_ini, angle) + self.ax.transData  
+        trans = transforms.Affine2D().rotate_deg_around(x_in, y_in, angle) + self.ax.transData  
 
         circle = plt.Circle((cx, cy), radius, edgecolor='black', 
                             facecolor='white', transform=trans, zorder=2)
@@ -355,12 +352,12 @@ class DiagramBuilder:
         # Side input
         if input_side == 'bottom':
             arrow_height = height - radius
-            y_init = y_ini - radius - arrow_height
+            y_init = y_in - radius - arrow_height
             offset_vector = np.array([radius, - (height + text_offset)])
             va = 'top'
         elif input_side == 'top':
             arrow_height = - (height - radius)
-            y_init = y_ini + radius - arrow_height
+            y_init = y_in + radius - arrow_height
             offset_vector = np.array([radius, height + text_offset])
             va = 'bottom'
         else:
@@ -377,50 +374,87 @@ class DiagramBuilder:
         x_out, y_out = self.__get_output_pos__(initial_position, [2 * cx, 0], angle)
         return [x_out, y_out]
 
-    def __draw_mult_combiner__(self, initial_position, length, inputs, output_text=None, operation='sum', side='bottom', fontsize=14):
+    def __draw_mult_combiner__(self, initial_position, length, inputs, 
+                               output_text=None, operation='sum', side='bottom', 
+                               text_offset=0.1, fontsize=14, orientation='horizontal'):
         """
-        Dibuja un sumador o multiplicador con múltiples entradas distribuidas desde pi/2 a 3*pi/2
-        a lo largo del borde izquierdo de un círculo. Las entradas pueden tener signo.
+        Draws a summation or multiplication block with multiple inputs distributed 
+        along the left edge of a circle, from pi/2 to 3*pi/2. Inputs can have a sign.
 
-        Parámetros:
-        - inputs: lista de tuplas (x, y) o (x, y, signo)
-        - output_text: etiqueta en la flecha de salida (a la derecha)
-        - position: centro del sumador (x0, y0)
-        - operation: 'sum' para suma, 'mult' para producto
-
+        Parameters:
+        - initial_position: (x, y) coordinates of the starting point.
+        - length: total horizontal length (diameter of the circle).
+        - inputs: list of tuples (x, y) or (x, y, sign)
+        - output_text: label on the output arrow (on the right)
+        - position: center of the summation block (x0, y0)
+        - operation: 'sum' for addition, 'mult' for multiplication
+        - text_offset: vertical offset for input/output labels.
+        - fontsize: font size of the labels.
+        - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', or angle.
         """
-        # Get head positions of input threads
-        thread_input_pos = np.array([self.thread_positions[key] for key in inputs])
-        
+        angle = 0
+        # Determine rotation angle based on orientation
+        if orientation in ['horizontal', 'right']:
+            angle = 0
+        elif orientation == 'left':
+            angle = 180
+        elif orientation in ['vertical', 'down']:
+            angle = -90
+        elif orientation == 'up':
+            angle = 90
+        elif isinstance(orientation, (int, float)):
+            angle = orientation
+        else:
+            angle = 0
+
         # If position is 'auto', obtain head position
         if isinstance(initial_position, str) and initial_position == 'auto':
-            x0 = np.max(thread_input_pos[:, 0])
-            y0 = np.mean(thread_input_pos[:,1])
+            # Get head positions of input threads
+            thread_input_pos = np.array([self.thread_positions[key] for key in inputs])
+            x_in = np.max(thread_input_pos[:, 0])
+            y_in = np.mean(thread_input_pos[:,1])
         # If position is given, use it
         else:
-            x0, y0 = initial_position
+            x_in, y_in = initial_position
         
-        x1 = x0 + length
-        cx = (x0 + x1) / 2
-        cy = y0
         radius = length / 10
-        
-        # Círculo
-        circle = plt.Circle((cx, cy), radius, edgecolor='black', facecolor='white', linewidth=1.5, zorder=2)
+        x_out = x_in + length
+        cx = (x_in + x_out) / 2
+        cy = y_in
+
+        # Apply rotation around the connection point (x_ini, y_ini)
+        trans = transforms.Affine2D().rotate_deg_around(x_in, y_in, angle) + self.ax.transData  
+
+        # Circle
+        circle = plt.Circle((cx, cy), radius, edgecolor='black', 
+                            facecolor='white', transform=trans, zorder=2)
         self.ax.add_patch(circle)
 
         # Dibujar símbolo dentro del círculo según operación
         rel_size = 0.7
         if operation == 'mult':
-            dx = radius * rel_size * np.cos(np.pi / 4)
+            # Líneas diagonales (forma de "X") dentro del círculo
+            dx = radius * rel_size * np.cos(np.pi / 4)  # Escalamos un poco para que quepa dentro del círculo
             dy = radius * rel_size * np.sin(np.pi / 4)
-            self.ax.plot([cx - dx, cx + dx], [cy - dy, cy + dy], color='black', linewidth=2, zorder=3)
-            self.ax.plot([cx - dx, cx + dx], [cy + dy, cy - dy], color='black', linewidth=2, zorder=3)
+            # Línea de 45°
+            self.ax.plot([cx - dx, cx + dx], [cy - dy, cy + dy], color='black', 
+                         linewidth=2, transform=trans, zorder=3)
+            # Línea de 135°
+            self.ax.plot([cx - dx, cx + dx], [cy + dy, cy - dy], color='black', 
+                         linewidth=2, transform=trans, zorder=3)
         elif operation == 'sum':
-            self.ax.plot([cx - radius * rel_size, cx + radius * rel_size], [cy, cy], color='black', linewidth=2, zorder=3)
-            self.ax.plot([cx, cx], [cy - radius * rel_size, cy + radius * rel_size], color='black', linewidth=2, zorder=3)
+            dx = radius * rel_size
+            dy = radius * rel_size
+            # Líneas horizontales y verticales (forma de "+") dentro del círculo
+            self.ax.plot([cx - dx, cx + dx], [cy, cy], color='black', 
+                         linewidth=2, transform=trans, zorder=3)
+            self.ax.plot([cx, cx], [cy - dy, cy + dy], color='black', 
+                         linewidth=2, transform=trans, zorder=3)
         else:
             raise ValueError(f"Unknown operation: {operation}. Use 'sum' or 'mult'.")
+
+        # Get rotation matrix
+        rot_matrix = transforms.Affine2D().rotate_deg(angle).get_matrix()[:2, :2]
 
         n = len(thread_input_pos)
         angles = np.linspace(5* np.pi / 8, 11 * np.pi / 8, n)
@@ -437,19 +471,21 @@ class DiagramBuilder:
 
             dx = x_edge - xi
             dy = y_edge - yi
+            offset_vec = [dx, dy]
+
+            dx_rot, dy_rot = rot_matrix @ offset_vec
 
             self.ax.add_patch(FancyArrow(
-                xi, yi, dx, dy,
+                xi, yi, dx_rot, dy_rot,
                 width=arrow_width,
                 length_includes_head=True,
                 head_width=arrow_head_width,
-                color='black',
-                zorder=1
+                color='black', transform=self.ax.transData, zorder=1
             ))
 
         # Flecha de salida
         x1 = cx + radius
-        x2 = x0 + length
+        x2 = x_in + length
 
         self.ax.add_patch(FancyArrow(
             x1, cy, x2 - x1, 0,
@@ -468,7 +504,7 @@ class DiagramBuilder:
                 ha='center', va='bottom', fontsize=fontsize
             )
 
-        return [x2, y0]
+        return [x2, y_in]
 
     def add(self,name, kind='block', thread='main', position=None, debug=False, **kwargs):
         """
@@ -599,18 +635,24 @@ class DiagramBuilder:
             # Function call
             final_pos = self.__draw_combiner__(initial_pos, **block_args)
 
-
-            # length=kwargs.get('length', self.block_length)
-            # final_pos = self.__draw_combiner__(initial_pos, height=length,
-            #                 input_text=kwargs.get('input_text'),
-            #                 operation=kwargs.get('operation'), 
-            #                 input_side=kwargs.get('input_side'), fontsize=self.fontsize)
-
         elif kind == 'mult_combiner':
-            length=kwargs.get('length', self.block_length*2.5)
-            final_pos = self.__draw_mult_combiner__(initial_pos, length=length, inputs=kwargs.get('inputs'),
-                            output_text=kwargs.get('text', name), 
-                            operation=kwargs.get('operation'), fontsize=self.fontsize)
+            # Default arguments
+            default_kwargs = {
+                'length': self.block_length*2.5,
+                'fontsize': self.fontsize,
+                'operation': 'mult',
+                'orientation': 'horizontal'
+            }
+            # Overrides default arguments with provided ones
+            block_args = {**default_kwargs, **kwargs}
+            # Function call
+            final_pos = self.__draw_mult_combiner__(initial_pos, **block_args)
+
+
+            # length=kwargs.get('length', self.block_length*2.5)
+            # final_pos = self.__draw_mult_combiner__(initial_pos, length=length, inputs=kwargs.get('inputs'),
+            #                 output_text=kwargs.get('text', name), 
+            #                 operation=kwargs.get('operation'), fontsize=self.fontsize)
 
         elif kind == 'output':
             length=kwargs.get('length', self.block_length)
