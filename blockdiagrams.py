@@ -160,7 +160,7 @@ class DiagramBuilder:
         cx = x_in + length / 2
         cy = y_in
 
-        # Apply rotation around the connection point (x_ini, y_ini)
+        # Apply the rotation around the connection point (x_ini, y_ini)
         trans = transforms.Affine2D().rotate_deg_around(x_in, y_in, angle) + self.ax.transData   
 
         self.ax.add_patch(Rectangle((x0, y0), length, height, 
