@@ -209,7 +209,9 @@ db.show(savepath = "block_vertical.png")
 
 ![Block Diagram](block_vertical.png)
 
-![Additional examples](diag_examples.ipynb)
+## Additional examples
+
+[Additional examples notebook](diag_examples.ipynb)
 
 ---
 
