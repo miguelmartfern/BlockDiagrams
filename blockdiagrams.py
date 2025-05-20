@@ -166,26 +166,50 @@ class DiagramBuilder:
         self.ax.add_patch(Rectangle((x0, y0), length, height, 
                                     edgecolor='black', facecolor='none', 
                                     linestyle=linestyle, transform=trans))
-
+        # Don't rotate text if orientation is vertical, down or up
+        rotate_text = False if orientation in ['vertical', 'down', 'up'] else True
+        
         # Draw text inside the block
         if text is not None:
             offset_vector = np.array([length / 2, 0])
             self.__draw_rotated_text__(initial_position, text, 
-                                       angle=angle, rotate_text=False,
+                                       angle=angle, rotate_text=rotate_text,
                                        ha='center', va='center', 
                                        fontsize=fontsize, offset=offset_vector)
             
         # Draw text above the block
         if text_above is not None:
+            if orientation in ['vertical', 'down']:
+                ha = 'left'
+                va = 'center'
+            elif orientation in ['up']:
+                ha = 'right'
+                va = 'center'
+            else:
+                ha = 'center'
+                va = 'bottom'
             offset_vector = np.array([length / 2, height / 2 + text_offset])
-            self.__draw_rotated_text__(initial_position, text_above, angle=angle,
-                  ha='center', va='bottom', fontsize=fontsize, offset=offset_vector)
+            self.__draw_rotated_text__(initial_position, text_above, 
+                                       angle=angle, rotate_text=rotate_text,
+                                       ha=ha, va=va, 
+                                       fontsize=fontsize, offset=offset_vector)
             
         # Draw text below the block
         if text_below is not None:
+            if orientation in ['vertical', 'down']:
+                ha = 'right'
+                va = 'center'
+            elif orientation in ['up']:
+                ha = 'left'
+                va = 'center'
+            else:
+                ha = 'center'
+                va = 'top'
             offset_vector = np.array([length / 2, - height / 2 - text_offset])
-            self.__draw_rotated_text__(initial_position, text_below, angle=angle,
-                  ha='center', va='top', fontsize=fontsize, offset=offset_vector)
+            self.__draw_rotated_text__(initial_position, text_below, 
+                                       angle=angle, rotate_text=rotate_text,
+                                       ha=ha, va=va, 
+                                       fontsize=fontsize, offset=offset_vector)
 
         if input_side is not None:
             if input_side == 'bottom':
@@ -193,11 +217,25 @@ class DiagramBuilder:
                 y_init = y0 - arrow_height
                 offset_vector = np.array([length / 2, - height /2 - arrow_height - text_offset])
                 va = 'top'
+                ha = 'center'
+                if orientation in ['vertical', 'down']:
+                    ha = 'right'
+                    va = 'center'
+                elif orientation in ['up']:
+                    ha = 'left'
+                    va = 'center'
             elif input_side == 'top':
                 arrow_height = - 0.75 * height
                 y_init = y0 + height - arrow_height
                 offset_vector = np.array([length / 2, height /2 - arrow_height + text_offset])
                 va = 'bottom'
+                ha = 'center'
+                if orientation in ['vertical', 'down']:
+                    ha = 'left'
+                    va = 'center'
+                elif orientation in ['up']:
+                    ha = 'right'
+                    va = 'center'
             else:
                 raise ValueError(f"Unknown input side: {input_side}. Use 'bottom' or 'top'.")   
 
@@ -205,8 +243,11 @@ class DiagramBuilder:
                                     length_includes_head=True, head_width=0.15, 
                                     color='black', transform=trans))
             if input_text is not None:
-                self.__draw_rotated_text__(initial_position, input_text, angle=angle,
-                    ha='center', va=va, fontsize=fontsize, offset=offset_vector)
+
+                self.__draw_rotated_text__(initial_position, input_text, 
+                                           angle=angle, rotate_text=rotate_text,
+                                           ha=ha, va=va, 
+                                           fontsize=fontsize, offset=offset_vector)
 
         # Compute rotated output point
         x_out, y_out = self.__get_output_pos__(initial_position, [length, 0], angle)
@@ -258,22 +299,44 @@ class DiagramBuilder:
         self.ax.add_patch(FancyArrow(x_in, y_in, length, 0, width=0.01,
                                 length_includes_head=True, head_width=head_width, 
                                 color='black', transform=trans))
+
+        # Don't rotate text if orientation is vertical, down or up
+        rotate_text = False if orientation in ['vertical', 'down', 'up'] else True
+
         if text:
             # Offset en coordenadas no rotadas
             if text_position == 'before':
                 ha, va = 'right', 'center'
                 offset_vector = np.array([-text_offset, 0])
+                if orientation in ['vertical', 'down']:
+                    ha = 'center'
+                    va = 'bottom'
+                elif orientation in ['up']:
+                    ha = 'center'
+                    va = 'top'
             elif text_position == 'after':
                 ha, va = 'left', 'center'
                 offset_vector = np.array([length + text_offset, 0])
+                if orientation in ['vertical', 'down']:
+                    ha = 'center'
+                    va = 'top'
+                elif orientation in ['up']:
+                    ha = 'center'
+                    va = 'bottom'
             elif text_position == 'above':
                 ha, va = 'center', 'bottom'
                 offset_vector = np.array([length / 2, text_offset])
+                if orientation in ['vertical', 'down',]:
+                    ha = 'left'
+                    va = 'bottom'
+                elif orientation in ['up']:
+                    ha = 'right'
+                    va = 'top'
             else:
                 raise ValueError(f"Unknown text_position: {text_position}")
 
             self.__draw_rotated_text__(initial_position, text, 
-                                       angle=angle, rotate_text=False,
+                                       angle=angle, rotate_text=rotate_text,
                                        ha=ha, va=va, offset=offset_vector)
         
         # Compute rotated output point
@@ -353,17 +416,34 @@ class DiagramBuilder:
         else:
             raise ValueError(f"Unknown operation: {operation}. 'operation' must be 'mult', 'sum' or 'dif'.")
 
+        # Don't rotate text if orientation is vertical, down or up
+        rotate_text = False if orientation in ['vertical', 'down', 'up'] else True
+
         # Side input
         if input_side == 'bottom':
             arrow_height = height - radius
             y_init = y_in - radius - arrow_height
             offset_vector = np.array([radius, - (height + text_offset)])
             va = 'top'
+            ha = 'center'
+            if orientation in ['vertical', 'down']:
+                ha = 'right'
+                va = 'center'
+            elif orientation in ['up']:
+                ha = 'left'
+                va = 'center'
         elif input_side == 'top':
             arrow_height = - (height - radius)
             y_init = y_in + radius - arrow_height
             offset_vector = np.array([radius, height + text_offset])
             va = 'bottom'
+            ha = 'center'
+            if orientation in ['vertical', 'down']:
+                ha = 'left'
+                va = 'center'
+            elif orientation in ['up']:
+                ha = 'right'
+                va = 'center'
         else:
             raise ValueError(f"Unknown input_side: {input_side}. 'input_side' must be 'bottom' or 'top'.")
 
@@ -371,8 +451,10 @@ class DiagramBuilder:
                                 length_includes_head=True, head_width=0.15, 
                                 color='black', transform=trans))
         if input_text is not None:
-            self.__draw_rotated_text__(initial_position, input_text, angle=angle,
-                    ha='center', va=va, fontsize=fontsize, offset=offset_vector)
+            self.__draw_rotated_text__(initial_position, input_text, 
+                                       angle=angle, rotate_text=rotate_text,
+                                       ha=ha, va=va, 
+                                       fontsize=fontsize, offset=offset_vector)
         
         # Compute rotated output point
         x_out, y_out = self.__get_output_pos__(initial_position, [2 * radius, 0], angle)
@@ -658,11 +740,6 @@ class DiagramBuilder:
             # Function call
             final_pos = self.__draw_mult_combiner__(initial_pos, **block_args)
 
-
-            # length=kwargs.get('length', self.block_length*2.5)
-            # final_pos = self.__draw_mult_combiner__(initial_pos, length=length, inputs=kwargs.get('inputs'),
-            #                 output_text=kwargs.get('text', name), 
-            #                 operation=kwargs.get('operation'), fontsize=self.fontsize)
 
         elif kind == 'output':
             length=kwargs.get('length', self.block_length)
