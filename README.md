@@ -1,9 +1,11 @@
 
 # BlockDiagrams
 
-**BlockDiagrams** is a lightweight Python library for drawing horizontal block diagrams using Matplotlib. It simplifies the visual creation of system and signal diagrams with functions to add blocks, arrows, summation nodes, and multipliers.
+**BlockDiagrams** is a lightweight Python library for drawing block diagrams with any orientation and several branches using Matplotlib. 
 
-v1.2
+It simplifies the visual creation of system and signal diagrams with functions to add blocks, lines, arrows, summation nodes, and multipliers.
+
+v1.3
 ---
 
 ## Features
@@ -11,12 +13,17 @@ v1.2
 - Draw rectangular blocks with LaTeX math text.
 - Add signal arrows with descriptive labels.
 - Include summation and multiplication nodes for system diagrams.
-- Horizontal orientation (left to right).
+- Horizontal, vertical (up and down), or any angle orientation.
 - Easy to use and extend for custom diagrams.
-- Automatic or manual position of elements
+- Automatic or manual position of elements.
 - Threads for several lines in diagrams.
 
 ## New features
+
+v1.3:
+- Allow for different orientation of elements.
+- 'horizontal', 'vertical', 'up', 'down' or any angle.
+- For 'vertical', 'up' and 'down' orientations text is mantained horizontal.
 
 v1.2:
 - 'block' allows bottom and top inputs.
@@ -114,47 +121,104 @@ import numpy as np
 
 db = DiagramBuilder(block_length=1, fontsize=16)
 
-y_pos = np.linspace(3, -3, 5)
-x_pos = np.zeros_like(y_pos)
-inputs_pos = np.column_stack((x_pos, y_pos))
+db.add("x_1(t)", kind="input", thread='upper', position=(0, 1))
+db.add("mult", kind="combiner", thread='upper', input_text="e^{-j\\omega_0 t}", input_side='top', operation='mult')
+db.add("", kind="line", thread='upper')
 
-input_threads = []
+db.add("x_2(t)", kind="input", thread='lower', position=(0, -1))
+db.add("mult", kind="combiner", input_text="e^{j\\omega_0 t}", input_side='bottom', operation='mult', thread='lower')
+db.add("", kind="line", thread='lower')
 
-# Input branches
-for cont in np.arange(inputs_pos.shape[0]):
-    thread = "line" + str(cont + 1)
-    input_threads.append(thread)
 
-    name = "x_" + str(cont + 1) +"(t)"
-    db.add(name, kind="input", thread = thread, position=(inputs_pos[cont]))
-    name =  "g_" + str(cont + 1) +"(t)"
-    db.add(name, kind="block", thread = thread)
-    name = "x_{c" + str(cont + 1) + "}(t)"
-    db.add(name, kind="line", thread = thread)
+input_threads = ['upper', 'lower']
 
 # Adder
-db.add("x_{sum}(t)", kind="mult_combiner", inputs=input_threads, position='auto', operation='sum')
+db.add("", kind="mult_combiner", inputs=input_threads, position="auto", operation='sum')
 
 # Resto del diagrama
-db.add("h_1(t)", kind="block")
-db.add("mult", kind="combiner", input_text="s(t)", operation='sum', side='top')
-db.add("h_2(t)", kind="block")
-db.add("y(t)", kind="output")
+db.add("H(\\omega)", kind="block")
+db.add("z(t)", kind="arrow")
+# db.add("mult", kind="combiner", input_left_text="z(t)", input_bottom_text="p(t)", output_text="x_p(t)", operation='sum')
+db.add("mult", kind="combiner", input_text="p(t)", input_side = 'bottom', operation='sum')
+db.add("x_p(t)", kind="arrow")
+db.add("C/D", kind="block")
+db.add("x[n]", kind="output")
 
-db.show(savepath = "diag3.png")
+db.show(savepath = 'diag3.png')
 ```
 
 ![Block Diagram](diag3.png)
+
+```python
+from blockdiagrams import DiagramBuilder
+
+db = DiagramBuilder(block_length=1, fontsize=16)
+
+angle = 45
+
+db.add("x(t)", kind="line", text_position='before', thread='upper')
+
+db.add("", kind="arrow", orientation=angle, length = 1, thread='upper')
+db.add("h_1(t)", kind="block", orientation=angle, text_below = "Filter1", input_text="BW_1", input_side='top', thread='upper')
+db.add("", kind="line", orientation=angle, text_position='above', thread='upper')
+db.add("y_1(t)", kind="arrow", text_position='above', thread='upper')
+db.add("mult", kind="combiner",  input_text="\cos(\omega_0 t)", operation='mult', input_side='bottom', thread='upper')
+db.add("y_i(t)", kind="line", text_position='above', thread='upper')
+db.add("", kind="arrow", orientation=-angle, length = 1, thread='upper')
+db.add("h_3(t)", kind="block", orientation=-angle, text_below = "Filter3", input_text="BW_1", input_side='top', thread='upper')
+
+db.add("", kind="arrow", orientation=-angle, length = 1, thread='lower', position=pos1)
+db.add("h_2(t)", kind="block", orientation=-angle, text_above = "Filter2", input_text="BW_2", input_side='bottom', thread='lower')
+db.add("", kind="line", orientation=-angle, text_position='above', thread='lower')
+db.add("y_2(t)", kind="arrow", text_position='above', thread='lower')
+db.add("mult", kind="combiner",  input_text="\sin(\omega_0 t)", operation='mult', input_side='top', thread='lower')
+db.add("y_q(t)", kind="line", text_position='above', thread='lower')
+db.add("", kind="arrow", orientation=angle, length = 1, thread='lower')
+db.add("h_3(t)", kind="block", orientation=angle, text_above = "Filter4", input_text="BW_2", input_side='bottom', thread='lower')
+
+input_threads = ['upper', 'lower']
+db.add("", kind="mult_combiner", inputs=input_threads, position="auto", operation='sum', output_text="y(t)")
+
+db.show(savepath = "block_2_branches.png")
+```
+
+![Block Diagram](block_2_branches.png)
+
+```python
+from blockdiagrams import DiagramBuilder
+import numpy as np
+
+angle = 'vertical'
+
+db = DiagramBuilder(block_length=1, fontsize=16)
+
+db.add("x_1(t)", kind="input", position=(0, 1), orientation = angle)
+db.add("mult", kind="combiner", input_text="e^{-j\\omega_0 t}", input_side='top', operation='mult', orientation = angle)
+db.add("x_2(t)", kind="arrow", orientation = angle)
+db.add("H(\\omega)", kind="block", input_side='top', input_text="a", orientation = angle)
+db.add("x_3(t)", kind="arrow", orientation = angle)
+db.add("mult", kind="combiner", input_text="p(t)", input_side = 'bottom', operation='sum', orientation = angle)
+db.add("x_p(t)", kind="arrow", orientation = angle)
+db.add("C/D", kind="block", orientation = angle)
+db.add("x[n]", kind="output", orientation = angle)
+
+db.show(savepath = "block_vertical.png")
+```
+
+![Block Diagram](block_vertical.png)
+
+![Additional examples](diag_examples.ipynb)
 
 ---
 
 ## Main Functions
 
-- `DiagramBuilder.add(name, kind, position=None, thread='main', **kwargs)`: Adds elements to the diagram.
+- `DiagramBuilder.add(name, kind, position=None, thread='main', orientation='horizontal', **kwargs)`: Adds elements to the diagram.
   - `kind`: `'block'`, `'arrow'`, `'input'`, `'output'`, `'combiner'`, `'mult_combiner'`.
   - `position`: Manual or automatic placement of elements.
   - `text`: LaTeX-formatted text to display inside or near the element.
   - `thread`: branch in diagram.
+  - `orientation`: orientation of element ('horizontal', 'vertical', 'up', 'down', angle).
 - `DiagramBuilder.get_position(thread='main')`: Gets actual head position of thread.
   - `thread`: thread you want to get its position (defaults to main thread).
 
@@ -162,8 +226,8 @@ db.show(savepath = "diag3.png")
 
 ## Upcoming Improvements
 
-- Support for vertical orientation.
-- Improved automatic layout and positioning.
+- Backward elements.
+- Feedback loops.
 
 ---
 
@@ -187,4 +251,4 @@ For questions or suggestions, feel free to contact me via GitHub.
 
 ---
 
-Thank you for using **blockdiag**!
+Thank you for using **blockdiagram**!
