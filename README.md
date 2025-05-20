@@ -59,7 +59,7 @@ from blockdiagrams import DiagramBuilder
 
 db = DiagramBuilder(block_length=1, fontsize=16)
 
-# Dibujo del diagrama
+# Diagram drawing
 db.add("x(t)", kind="input")
 db.add("h_{aa}(t)", kind="block")
 db.add("mult", kind="combiner", input_text="p(t)", operation='mult', side='bottom')
@@ -76,7 +76,7 @@ db.add("x_r(t)", kind="output")
 db.show(savepath = "diag1.png")
 ```
 
-![Block Diagram](diag1.png)
+![Block Diagram](Examples/diag1.png)
 
 ---
 
@@ -87,7 +87,7 @@ from blockdiagrams import DiagramBuilder
 
 db = DiagramBuilder(block_length=1, fontsize=16)
 
-# Dibujo del diagrama
+# Diagram drawing
 db.add("x(t)", kind="input")
 db.add("h_{aa}(t)", kind="block")
 db.add("x_c(t)", kind="arrow", length=2)
@@ -113,7 +113,7 @@ db.add("h_c(t)", kind="block", text=None, text_below="h_c(t)", position=position
 db.show()
 ```
 
-![Block Diagram](diag2.png)
+![Block Diagram](Examples/diag2.png)
 
 ```python
 from blockdiagrams import DiagramBuilder
@@ -135,10 +135,9 @@ input_threads = ['upper', 'lower']
 # Adder
 db.add("", kind="mult_combiner", inputs=input_threads, position="auto", operation='sum')
 
-# Resto del diagrama
+# Rest of the diagram
 db.add("H(\\omega)", kind="block")
 db.add("z(t)", kind="arrow")
-# db.add("mult", kind="combiner", input_left_text="z(t)", input_bottom_text="p(t)", output_text="x_p(t)", operation='sum')
 db.add("mult", kind="combiner", input_text="p(t)", input_side = 'bottom', operation='sum')
 db.add("x_p(t)", kind="arrow")
 db.add("C/D", kind="block")
@@ -147,7 +146,7 @@ db.add("x[n]", kind="output")
 db.show(savepath = 'diag3.png')
 ```
 
-![Block Diagram](diag3.png)
+![Block Diagram](Examples/diag3.png)
 
 ```python
 from blockdiagrams import DiagramBuilder
@@ -184,7 +183,7 @@ db.add("", kind="mult_combiner", inputs=input_threads, position="auto", operatio
 db.show(savepath = "block_2_branches.png")
 ```
 
-![Block Diagram](block_2_branches.png)
+![Block Diagram](Examples/block_2_branches.png)
 
 ```python
 from blockdiagrams import DiagramBuilder
@@ -207,11 +206,11 @@ db.add("x[n]", kind="output", orientation = angle)
 db.show(savepath = "block_vertical.png")
 ```
 
-![Block Diagram](block_vertical.png)
+![Block Diagram](Examples/block_vertical.png)
 
 ## Additional examples
 
-[Additional examples notebook](diag_examples.ipynb)
+[Additional examples notebook](Examples/diag_examples.ipynb)
 
 ---
 
