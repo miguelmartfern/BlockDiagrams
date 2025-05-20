@@ -4,9 +4,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Rectangle, FancyArrow
-# from matplotlib.transforms import Bbox
 from matplotlib import transforms
-from matplotlib.text import Text
+# from matplotlib.text import Text
 
 # --- DiagramBuilder class ---
 
@@ -60,7 +59,7 @@ class DiagramBuilder:
 
     # --- Drawing functions ---
 
-    def __draw_rotated_text__(self, anchor_point, text, angle, 
+    def __draw_rotated_text__(self, anchor_point, text, angle, rotate_text = True,
                       ha='center', va='center', fontsize=16, offset=(0, 0)):
         """
         Draws text rotated around the anchor point (x, y) with optional offset.
@@ -84,9 +83,14 @@ class DiagramBuilder:
         tx = anchor_point[0] + dx_rot
         ty = anchor_point[1] + dy_rot
 
+        if rotate_text is False:
+            text_angle = 0
+        else:
+            text_angle = angle
+        
         # Draw text with angle, rotating around anchor point
         self.ax.text(tx, ty, f"${text}$", ha=ha, va=va, fontsize=fontsize,
-                rotation=angle, rotation_mode='anchor', transform=self.ax.transData)
+                rotation=text_angle, rotation_mode='anchor', transform=self.ax.transData)
 
 
     def __draw_block__(self, initial_position, text=None, text_below=None, 
@@ -131,7 +135,7 @@ class DiagramBuilder:
             raise ValueError(f"Invalid fontsize: {fontsize}. Font size must be a number.")
         
         
-        angle = 0
+        # angle = 0
         # Determine rotation angle based on orientation
         if orientation in ['horizontal', 'right']:
             angle = 0
@@ -166,8 +170,10 @@ class DiagramBuilder:
         # Draw text inside the block
         if text is not None:
             offset_vector = np.array([length / 2, 0])
-            self.__draw_rotated_text__(initial_position, text, angle=angle,
-                  ha='center', va='center', fontsize=fontsize, offset=offset_vector)
+            self.__draw_rotated_text__(initial_position, text, 
+                                       angle=angle, rotate_text=False,
+                                       ha='center', va='center', 
+                                       fontsize=fontsize, offset=offset_vector)
             
         # Draw text above the block
         if text_above is not None:
@@ -245,9 +251,6 @@ class DiagramBuilder:
         cx = x_in + length / 2
         cy = y_in
 
-        # x0, y = initial_position
-        # x1 = x0 + length
-
         # Apply rotation around the connection point (x_ini, y_ini)
         trans = transforms.Affine2D().rotate_deg_around(x_in, y_in, angle) + self.ax.transData   
 
@@ -269,8 +272,9 @@ class DiagramBuilder:
             else:
                 raise ValueError(f"Unknown text_position: {text_position}")
 
-            self.__draw_rotated_text__(initial_position, text, angle=angle,
-                  ha=ha, va=va, offset=offset_vector)
+            self.__draw_rotated_text__(initial_position, text, 
+                                       angle=angle, rotate_text=False,
+                                       ha=ha, va=va, offset=offset_vector)
         
         # Compute rotated output point
         x_out, y_out = self.__get_output_pos__(initial_position, [length, 0], angle)
@@ -371,7 +375,7 @@ class DiagramBuilder:
                     ha='center', va=va, fontsize=fontsize, offset=offset_vector)
         
         # Compute rotated output point
-        x_out, y_out = self.__get_output_pos__(initial_position, [2 * cx, 0], angle)
+        x_out, y_out = self.__get_output_pos__(initial_position, [2 * radius, 0], angle)
         return [x_out, y_out]
 
     def __draw_mult_combiner__(self, initial_position, length, inputs, 
@@ -413,6 +417,7 @@ class DiagramBuilder:
             thread_input_pos = np.array([self.thread_positions[key] for key in inputs])
             x_in = np.max(thread_input_pos[:, 0])
             y_in = np.mean(thread_input_pos[:,1])
+            initial_position = [x_in, y_in]
         # If position is given, use it
         else:
             x_in, y_in = initial_position
@@ -469,14 +474,18 @@ class DiagramBuilder:
             x_edge = cx + radius * np.cos(angles[i])
             y_edge = cy + radius * np.sin(angles[i])
 
-            dx = x_edge - xi
-            dy = y_edge - yi
+            dx = x_edge - x_in
+            dy = y_edge - y_in
             offset_vec = [dx, dy]
 
+            # Rotated offset vector with respect to initial_position of element
             dx_rot, dy_rot = rot_matrix @ offset_vec
+            # Rotated offset vector with respect to initial position of arrow
+            dx_rot_rel = dx_rot - xi + x_in
+            dy_rot_rel = dy_rot - yi + y_in
 
             self.ax.add_patch(FancyArrow(
-                xi, yi, dx_rot, dy_rot,
+                xi, yi, dx_rot_rel, dy_rot_rel,
                 width=arrow_width,
                 length_includes_head=True,
                 head_width=arrow_head_width,
@@ -485,26 +494,27 @@ class DiagramBuilder:
 
         # Flecha de salida
         x1 = cx + radius
-        x2 = x_in + length
 
         self.ax.add_patch(FancyArrow(
-            x1, cy, x2 - x1, 0,
+            x1, cy, x_out - x1, 0,
             width=arrow_width,
             length_includes_head=True,
             head_width=arrow_head_width,
-            color='black',
-            zorder=1
+            color='black', transform=trans, zorder=1
         ))
 
         # Texto de salida
         if output_text:
-            self.ax.text(
-                (x1 + x2) / 2, cy + arrow_head_width / 2,
-                f"${output_text}$",
-                ha='center', va='bottom', fontsize=fontsize
-            )
+            offset_vector = np.array([(x1 + x_out) / 2 - x_in, text_offset])
+            self.__draw_rotated_text__(initial_position, output_text, 
+                                       angle=angle, ha='center', va='bottom', 
+                                       offset=offset_vector)
 
-        return [x2, y_in]
+        # Compute rotated output point
+        x_out, y_out = self.__get_output_pos__(initial_position, [length, 0], angle)
+        return [x_out, y_out]
+
+        return [x_out, y_in]
 
     def add(self,name, kind='block', thread='main', position=None, debug=False, **kwargs):
         """
