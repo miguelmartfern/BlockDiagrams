@@ -159,6 +159,8 @@ angle = 45
 db.add("x(t)", kind="line", text_position='before', thread='upper')
 
 db.add("", kind="arrow", orientation=angle, length = 1, thread='upper')
+pos1 = db.get_position(thread='upper')
+
 db.add("h_1(t)", kind="block", orientation=angle, text_below = "Filter1", input_text="BW_1", input_side='top', thread='upper')
 db.add("", kind="line", orientation=angle, text_position='above', thread='upper')
 db.add("y_1(t)", kind="arrow", text_position='above', thread='upper')
