@@ -85,7 +85,7 @@ db.add("x_r(t)", kind="output")
 db.show(savepath = "diag1.png")
 ```
 
-![Block Diagram](Examples/diag1.png)
+![Block Diagram](notebooks/diag1.png)
 
 ---
 
@@ -122,7 +122,7 @@ db.add("h_c(t)", kind="block", text=None, text_below="h_c(t)", position=position
 db.show()
 ```
 
-![Block Diagram](Examples/diag2.png)
+![Block Diagram](notebooks/diag2.png)
 
 ```python
 from blockdiagrams import DiagramBuilder
@@ -155,7 +155,7 @@ db.add("x[n]", kind="output")
 db.show(savepath = 'diag3.png')
 ```
 
-![Block Diagram](Examples/diag3.png)
+![Block Diagram](notebooks/diag3.png)
 
 ```python
 from blockdiagrams import DiagramBuilder
@@ -192,7 +192,7 @@ db.add("", kind="mult_combiner", inputs=input_threads, position="auto", operatio
 db.show(savepath = "block_2_branches.png")
 ```
 
-![Block Diagram](Examples/block_2_branches.png)
+![Block Diagram](notebooks/block_2_branches.png)
 
 ```python
 from blockdiagrams import DiagramBuilder
@@ -215,11 +215,11 @@ db.add("x[n]", kind="output", orientation = angle)
 db.show(savepath = "block_vertical.png")
 ```
 
-![Block Diagram](Examples/block_vertical.png)
+![Block Diagram](notebooks/block_vertical.png)
 
 ## Additional examples
 
-[Additional examples notebook](Examples/diag_examples.ipynb)
+[Additional examples notebook](notebooks/diag_examples.ipynb)
 
 ---
 
