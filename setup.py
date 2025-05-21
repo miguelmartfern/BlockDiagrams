@@ -8,7 +8,7 @@ long_description = (this_dir / "README.md").read_text(encoding="utf-8")
 setup(
     name="blockdiagrams",
     version="1.3.1",
-    description="Library to draw block diagrams with Matplotlib",
+    description="Library to draw Signal and Sistems elements with Matplotlib",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Miguel Á. Martín-Fernández",
