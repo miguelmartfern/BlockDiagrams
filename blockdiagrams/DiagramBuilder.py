@@ -411,7 +411,7 @@ class DiagramBuilder:
             dx = radius * rel_size
             # Línea horizontal (forma de "-") dentro del círculo
             self.ax.plot([cx - dx, cx + dx], [cy, cy], color='black', 
-                         linewidth=2, transforms=trans, zorder=3)
+                         linewidth=2, transform=trans, zorder=3)
         else:
             raise ValueError(f"Unknown operation: {operation}. 'operation' must be 'mult', 'sum' or 'dif'.")
 
