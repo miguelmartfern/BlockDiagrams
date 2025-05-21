@@ -40,13 +40,22 @@ v1.0:
 - Initial version.
 ---
 
+## Requirements
+
+- Python >= 3.7
+- Matplotlib
+- NumPy
+
 ## Installation
 
-The library is not yet published on PyPI. You can clone the repository directly:
+The library is not yet published on PyPI. You can clone the repository directly and execute:
 
 ```bash
-git clone https://github.com/miguelmartfern/BlockdDagrams.git
+git clone https://github.com/usuario/blockdiagrams.git
+cd blockdiagrams
+pip install -e .
 ```
+
 
 Then simply import the `BlockDiagrams.py` module into your project.
 
