@@ -1,3 +1,3 @@
-from .diagram_builder import DiagramBuilder
+from .DiagramBuilder import DiagramBuilder
 
 __all__ = ["DiagramBuilder"]
