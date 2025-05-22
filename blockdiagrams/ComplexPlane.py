@@ -288,25 +288,31 @@ class ComplexPlane:
                 ax.add_patch(Circle((0, 0), r, edgecolor='blue', facecolor='none',
                                     linestyle='--', linewidth=1.2, zorder=7))
     
-    def label_positions(self, positions, labels):
+    def label_positions(self, positions, labels, offset=0.08):
         """
-        Place labels on given positions, which can be:
-        - complex numbers (cartesian coordinates)
-        - tuples (r, theta) in polar coordinates
+        Place labels on given positions, and draw a small black circle at each.
 
         Parameters:
         -----------
-        ax : matplotlib.axes.Axes
-            The axes where to plot the labels.
         positions : list
-            List of positions, each either complex (x+jy) or tuple (r, theta).
+            List of positions, either:
+            - complex numbers (x + jy), or
+            - tuples (r, theta) in polar coordinates.
         labels : list of str
-            List of labels for each position.
+            Text labels to place at each position.
+        offset : float
+            Vertical offset for the text label to avoid overlapping the marker.
         """
         points_cartesian = self._process_points(positions)
 
         for pos, label in zip(points_cartesian, labels):
-            self.ax.text(pos.real, pos.imag, label, fontsize=12, ha='center', va='center', zorder=10)
+            x, y = pos.real, pos.imag
+
+            # Small black circle
+            self.ax.plot(x, y, 'o', color='black', markersize=3, zorder=9)
+
+            # Label text slightly above the marker
+            self.ax.text(x, y + offset, label, fontsize=12, ha='center', va='bottom', zorder=10)
 
     # === Show and save ===
 
