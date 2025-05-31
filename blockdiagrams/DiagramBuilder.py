@@ -364,7 +364,8 @@ class DiagramBuilder:
 
             self.__draw_rotated_text__(initial_position, text, 
                                        angle=angle, rotate_text=rotate_text,
-                                       ha=ha, va=va, offset=offset_vector)
+                                       ha=ha, va=va, offset=offset_vector,
+                                       fontsize=fontsize)
         
         # Compute rotated output point
         output_pos = self.__get_rotated_pos__(initial_position, [length, 0], angle)
@@ -374,6 +375,80 @@ class DiagramBuilder:
         self.__add_element_position__(input_pos=[x_in,y_in], output_pos=output_pos,
                                       feedback_pos=feedback_pos)
         return output_pos
+
+    def __draw_angled_arrow__(self, initial_pos, final_pos, 
+                            text=None, text_offset=0.2, fontsize=14,
+                            first_segment='horizontal', orientation='horizontal'):
+        """
+        Draws a right-angled arrow composed of two segments, with a specified first segment.
+
+        Parameters:
+        - initial_pos: tuple (x0, y0) starting point
+        - final_pos: tuple (x1, y1) ending point
+        - text: optional label to place near the bend
+        - text_offset: offset for label placement
+        - fontsize: size of the label text
+        - first_segment: 'horizontal' or 'vertical' to decide drawing order
+
+        Returns:
+        - final_pos: the ending position
+        - style: a string like 'right-up', 'down-left', etc.
+        """
+
+        x0, y0 = initial_pos
+        x1, y1 = final_pos
+        dx = x1 - x0
+        dy = y1 - y0
+
+        if first_segment == 'horizontal':
+            corner = (x1, y0)
+            # Direction style
+            hdir = 'right' if dx > 0 else 'left' if dx < 0 else ''
+            vdir = 'up' if dy > 0 else 'down' if dy < 0 else ''
+        elif first_segment == 'vertical':
+            corner = (x0, y1)
+            vdir = 'up' if dy > 0 else 'down' if dy < 0 else ''
+            hdir = 'right' if dx > 0 else 'left' if dx < 0 else ''
+        else:
+            raise ValueError("first_segment must be either 'horizontal' or 'vertical'")
+
+        # Build style string
+        if hdir and vdir:
+            style = f"{hdir}-{vdir}" if first_segment == 'horizontal' else f"{vdir}-{hdir}"
+        elif hdir:
+            style = hdir
+        elif vdir:
+            style = vdir
+        else:
+            style = 'point'
+
+        # Draw segments
+        if first_segment == 'horizontal':
+            if dx != 0:
+                self.ax.annotate('', xy=corner, xytext=initial_pos,
+                                arrowprops=dict(arrowstyle='-', color='black', linewidth=1.5))
+            if dy != 0:
+                self.ax.annotate('', xy=final_pos, xytext=corner,
+                                arrowprops=dict(arrowstyle='-|>', color='black', linewidth=1.5,
+                                                mutation_scale=12, fc='black'))
+        else:  # first vertical
+            if dy != 0:
+                self.ax.annotate('', xy=corner, xytext=initial_pos,
+                                arrowprops=dict(arrowstyle='-', color='black', linewidth=1.5))
+            if dx != 0:
+                self.ax.annotate('', xy=final_pos, xytext=corner,
+                                arrowprops=dict(arrowstyle='-|>', color='black', linewidth=1.5,
+                                                mutation_scale=12, fc='black'))
+
+        # Optional text near the corner
+        if text:
+            self.ax.text(corner[0] + text_offset, corner[1] + text_offset,
+                        text, fontsize=fontsize, ha='left', va='bottom')
+
+        # Save element position
+        self.__add_element_position__(input_pos=initial_pos, output_pos=final_pos, feedback_pos=corner)
+
+        return final_pos
 
     def __draw_combiner__(self, initial_position, height=1,
                         input_text=None, operation='mult', input_side='bottom', 
@@ -684,6 +759,21 @@ class DiagramBuilder:
             block_args = {**default_kwargs, **kwargs}
             # Function call
             final_pos = self.__draw_arrow__(initial_pos, **block_args)
+
+        elif kind == 'angled_arrow':
+            # Default arguments
+            default_kwargs = {
+                'text': name,
+                # 'text_position': 'above',
+                # 'arrow': True,
+                'text_offset': 0.1,
+                'fontsize': self.fontsize,
+                'orientation': 'horizontal',
+            }
+            # Overrides default arguments with provided ones
+            block_args = {**default_kwargs, **kwargs}
+            # Function call
+            final_pos = self.__draw_angled_arrow__(initial_pos, **block_args)
 
         elif kind == 'input':
             # Default arguments
