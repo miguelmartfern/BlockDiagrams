@@ -65,7 +65,7 @@ class DiagramBuilder:
         # Apply rotation to the output vector
         dx, dy = rotation_matrix @ out_vector
         # Add the rotated output vector to the initial position
-        return [init_pos[0] + dx, init_pos[1] + dy]
+        return np.array([init_pos[0] + dx, init_pos[1] + dy])
 
     def __add_element_position__(self, input_pos: Tuple[float, float], 
                                  output_pos: Tuple[float, float], 
