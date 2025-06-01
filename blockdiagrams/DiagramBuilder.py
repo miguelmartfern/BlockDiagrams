@@ -591,10 +591,10 @@ class DiagramBuilder:
                                     ha=ha, va=va, 
                                     fontsize=fontsize, offset=[-radius, 1.5*radius])
         if signs[1] is not None:
-            self.__draw_rotated_text__(initial_position, signs[0], 
+            self.__draw_rotated_text__(initial_position, signs[1], 
                                     angle=angle, rotate_text=rotate_text,
                                     ha=ha, va=va, 
-                                    fontsize=fontsize, offset=[-radius, 1.5*radius])
+                                    fontsize=fontsize, offset=[0, -1.5*radius])
 
         self.ax.add_patch(FancyArrow(cx, y_init, 0, arrow_height, width=0.01,
                                 length_includes_head=True, head_width=0.15, 
