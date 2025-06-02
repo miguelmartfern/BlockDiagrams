@@ -17,12 +17,28 @@ class ElementPosition:
     feedback_pos: Tuple[float, float]
 class DiagramBuilder:
     """
-    Helper class for creating signal processing diagrams step by step.
+    A helper class for incrementally building signal processing diagrams using Matplotlib.
+
+    This class provides high-level methods to add standard diagram components like blocks, arrows,
+    combiners, and input/output labels, keeping track of layout and threading.
+
+    Args:
+        block_length (float, optional): Default horizontal size of blocks.
+        block_height (float, optional): Default vertical size of blocks.
+        fontsize (int, optional): Default font size for all text.
     
-    Keeps track of horizontal position and allows adding components
-    like blocks, arrows, multipliers, and input/output signals in order.
+    Returns:
+        (DiagramBuilder): created object.
+        
+    Examples:
+        >>> from blockdiagrams import DiagramBuilder
+        >>> db1 = DiagramBuilder()
+        >>> db2 = DiagramBuilder(block_length=2, fontsize=16)
     """
     def __init__(self, block_length=1.0, block_height=1.0, fontsize=20):
+        """
+        (Private) Creator of the DiagramBuilder class.
+        """
         self.fig, self.ax = plt.subplots()
         # self.ax.set_xlim(*xlim)
         # self.ax.set_ylim(*ylim)
@@ -38,7 +54,29 @@ class DiagramBuilder:
         # Counter for current element
         self.current_element = -1
     
-    def __print_threads__(self):
+    def print_threads(self):
+        """
+        Prints name of each thread in diagram and actual position.
+    
+        Examples:
+            >>> from blockdiagrams import DiagramBuilder
+            >>> db = DiagramBuilder(block_length=1, fontsize=16)
+            >>> # Upper thread
+            >>> db.add("x_1(t)", kind="input", thread='upper', position=(0, 1))
+            >>> db.add("mult", kind="combiner", thread='upper', input_text="e^{-j\\omega_0 t}", input_side='top', operation='mult')
+            >>> db.add("", kind="line", thread='upper')
+            >>> # Lower thread
+            >>> db.add("x_2(t)", kind="input", thread='lower', position=(0, -1))
+            >>> db.add("mult", kind="combiner", input_text="e^{j\\omega_0 t}", input_side='bottom', operation='mult', thread='lower')
+            >>> db.add("", kind="line", thread='lower')
+            >>> input_threads = ['upper', 'lower']
+            >>> # Adder
+            >>> db.add("", kind="mult_combiner", inputs=input_threads, position="auto", operation='sum')
+            >>> # Rest of the diagram (main thread)
+            >>> db.add("x(t)", kind="output")
+            >>> db.show()
+            >>> db.print_threads()
+        """
         for thread in self.thread_positions:
             print(thread, ": ", self.thread_positions[thread])
 
@@ -50,12 +88,16 @@ class DiagramBuilder:
     
     def __get_rotated_pos__(self, init_pos, outvector, angle):
         """
-        Compute rotated point
+        Inner method.
+        Compute rotated point init_pos + outvector.
 
-        Parameters:
-        - init_pos: initial position of the block
-        - outvector: output vector before rotation (respecto to init_pos)
-        - angle: rotation angle in degrees
+        Args:
+            init_pos (Numpy.NDArray or list): Initial position of the block (relative origin of coordinates).
+            outvector (Numpy.NDArray or list): Output vector before rotation (relative position with respect to init_pos).
+            angle (float): Rotation angle in degrees.
+
+        Returns:
+            (Numpy.NDArray): Rotated position of vector init_pos + outvector.
         """
 
         # Output point respect to input point (before rotation)
@@ -70,30 +112,41 @@ class DiagramBuilder:
     def __add_element_position__(self, input_pos: Tuple[float, float], 
                                  output_pos: Tuple[float, float], 
                                  feedback_pos: Tuple[float, float]):
-            """Adds a new element with the given positions."""
-            self.current_element += 1
+        """
+        Inner method.
+        Adds a new element with the given input, output and feedback positions.
+
+        Args:
+            input_pos (Numpy.NDArray or list): Input position of the block.
+            output_pos (Numpy.NDArray or list): Output position of the block.
+            Feedback_pos (Numpy.NDArray or list): Feedback port position of the block.
+        """
+        self.current_element += 1
             
-            self.element_positions[self.current_element] = ElementPosition(
-                input_pos=input_pos,
-                output_pos=output_pos,
-                feedback_pos=feedback_pos
-            )
+        self.element_positions[self.current_element] = ElementPosition(
+            input_pos=input_pos,
+            output_pos=output_pos,
+            feedback_pos=feedback_pos
+        )
 
     # --- Drawing functions ---
 
     def __draw_rotated_text__(self, anchor_point, text, angle, rotate_text = True,
                       ha='center', va='center', fontsize=16, offset=(0, 0)):
         """
-        Draws text rotated around the anchor point (x, y) with optional offset.
+        Inner method.
+        Draws text rotated around the anchor point with optional offset. 
+        Text position: rotation(anchor_point + offset)
 
-        Parameters:
-        - ax: matplotlib Axes object.
-        - anchor_point: coordinates of the anchor point.
-        - text: string to display.
-        - angle: rotation angle in degrees.
-        - ha, va: horizontal and vertical alignment.
-        - fontsize: font size.
-        - offset: tuple (dx, dy) in data coordinates, before rotation.
+        Args:
+            anchor_point (Numpy.NDArray or list): Coordinates of the anchor point.
+            text (string): String to display. LaTeX math accepted (without $...$).
+            angle (float): Rotation angle in degrees.
+            rotate_text (bool, optional): Indicates if text must be rotated or not.
+            ha (string, optional): Horizontal alignment: {'center', 'left', 'right'}.
+            va (string, optional): Vertical alignment: {'center', 'bottom', 'top'}.
+            fontsize (int, optional): Font size.
+            offset (Numpy.NDArray or list): Coordinates of texr position respect to anchor point, before rotation.
         """
         # Apply rotation to the offset vector
         dx, dy = offset
@@ -120,22 +173,25 @@ class DiagramBuilder:
                        input_side=None, length=1.5, height=1, fontsize=14, 
                        linestyle='-', orientation='horizontal'):
         """
-        Draws a rectangular block with centered text.
+        Inner method.
+        Draws a rectangular block with centered text, optional texts below and/or above and optional input arrow with text.
 
-        Parameters:
-        - ax: matplotlib Axes object where the diagram is drawn.
-        - initial_position: (x, y) coordinates of the center of the left edge of the block.
-        - text: label to display in the block.
-        - text_below: position of the text below the block
-        - text_above: position of the text above the block
-        - text_offset: vertical offset for the text position.
-        - input_text: label for the input arrow (below or above the arrow).
-        - input_side: 'bottom' or 'top' to place the input arrow.
-        - length: horizontal length of the block.
-        - height: vertical height of the block.
-        - fontsize: font size of the text inside the block.
-        - linesyle: linestyle of the block edge: '-, '--, ':', '-.'.
-        - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle.
+        Args:
+            initial_position (Numpy.NDarray or list): Coordinates of the center position of the input edge of the block.
+            text (string, optional): Label to display in the block.
+            text_below (string, optional): Label to display below the block.
+            text_above (string, optional): Label to display above the block.
+            text_offset (float, optional): Vertical offset for the text position.
+            input_text (string, optional): Label for the optional input arrow (below or above the block).
+            input_side (string, optional): Side to place the input arrow: {'bottom', 'top', None}
+            length (float, optional): Horizontal length of the block. If not entered, default `block_length` is used.
+            height (float, optional): Vertical height of the block. If not entered, default `block_height` is used.
+            fontsize (int, optional): font size of the text inside the block. If not entered, default `fontsize` is used.
+            linestyle (string, optional): linestyle of the block edge: {'-, '--, ':', '-.'}.
+            orientation (string or float, optional): Direction of the block: {'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle}.
+
+        Returns:
+            (Numpy.NDArray): Coordinates of the center position of the output edge of the block.
         """
         # Parameters validation
         if input_side not in (None, 'top', 'bottom'):
@@ -290,16 +346,21 @@ class DiagramBuilder:
                        text_position = 'above', text_offset=0.2, arrow = True,
                        fontsize=14, orientation='horizontal'):
         """
+        Inner method.
         Draws a horizontal arrow with optional label.
 
-        Parameters:
-        - ax: matplotlib Axes object where the diagram is drawn.
-        - position: (x, y) coordinates of the arrow starting point.
-        - length: horizontal length of the arrow.
-        - text: optional label above the arrow.
-        - text_offset: (x, y) offset for positioning the label relative to the arrow.
-        - fontsize: font size of the label.
-        - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle.
+        Args:
+            initial_position (Numpy.NDarray or list): Coordinates of the center position of the input edge of the block.
+            length (float, optional): Horizontal length of the block. If not entered, default `block_length` is used.
+            text (string, optional): Label to display in the block.
+            text_position (string, optional): Position of the optional text: {'before', 'after', 'above'}
+            text_offset (float, optional): Vertical offset for the text position.
+            arrow (bool, optional): Indicated if an line mush finish or not in an arrow.
+            fontsize (int, optional): font size of the text inside the block. If not entered, default `fontsize` is used.
+            orientation (string or float, optional): Direction of the block: {'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle}.
+
+        Returns:
+            (Numpy.NDArray): Coordinates of output point of the arrow.
         """
         # end = (initial_position[0] + length, initial_position[1])
         head_width = 0.15 if arrow else 0
@@ -757,9 +818,29 @@ class DiagramBuilder:
 
     def add(self,name, kind='block', thread='main', position=None, debug=False, **kwargs):
         """
-        Adds a diagram element to the current position and advances the x coordinate.
-        `kind` can be: input, output, arrow, block, block_uparrow, mult.
+        Adds a diagram element at the current position of a specified thread.
+
+        This is the main user-facing method to add blocks, arrows, inputs, outputs, or combiners.
+        Automatically updates the thread position for sequential drawing. It supports LaTeX math notation.
+
+        Args:
+            name (str): The label for the element or arrow.
+            kind (str): Type of element. Can be 'block', 'arrow', 'input', 'output',
+                        'line', 'combiner', 'mult_combiner', or 'angled_arrow'.
+            thread (str): Identifier for the drawing thread (used for branching).
+            position (tuple or str, optional): Custom (x, y) position or 'auto' if computed internally.
+            debug (bool): Whether to print thread states after adding.
+            **kwargs: Additional keyword arguments passed to the internal drawing functions.
+
+        Raises:
+            ValueError: If an unknown element kind is provided.
+
+        Example:
+            >>> builder.add("Input", kind="input")
+            >>> builder.add("Gain", kind="block", orientation="vertical")
+            >>> builder.add("Output", kind="output", thread="main")
         """
+
         # print(thread)
         # print(self.current_x)
         # print(self.positions)
