@@ -350,7 +350,7 @@ class DiagramBuilder:
         Draws a horizontal arrow with optional label.
 
         Args:
-            initial_position (Numpy.NDarray or list): Coordinates of the center position of the input edge of the block.
+            initial_position (Numpy.NDarray or list): Coordinates of the starting point of the arrow.
             length (float, optional): Horizontal length of the block. If not entered, default `block_length` is used.
             text (string, optional): Label to display in the block.
             text_position (string, optional): Position of the optional text: {'before', 'after', 'above'}
@@ -447,19 +447,21 @@ class DiagramBuilder:
                             text=None, text_offset=0.2, arrow = True, fontsize=14,
                             first_segment='horizontal', orientation='horizontal'):
         """
-        Draws a right-angled arrow composed of two segments, with a specified first segment.
+        Inner method.
+        Draws a right-angled arrow composed of two segments, with a specified first segment orientation and optional label.
 
-        Parameters:
-        - initial_pos: tuple (x0, y0) starting point
-        - final_pos: tuple (x1, y1) ending point
-        - text: optional label to place near the bend
-        - text_offset: offset for label placement
-        - fontsize: size of the label text
-        - first_segment: 'horizontal' or 'vertical' to decide drawing order
+        Args:
+            initial_position (Numpy.NDarray or list): Coordinates of the starting point of the arrow.
+            final_pos(Numpy.NDarray or list): Coordinates of the ending point of the arrow.
+            text (string, optional): Label to display in the block.
+            text_offset (float, optional): Vertical offset for the text position.
+            arrow (bool, optional): Indicated if an line mush finish or not in an arrow.
+            fontsize (int, optional): font size of the text inside the block. If not entered, default `fontsize` is used.
+            first_segment (string, optional): drawing order: {'horizontal', 'vertical'}
+            orientation (string or float, optional): Direction of the block: {'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle}.
 
         Returns:
-        - final_pos: the ending position
-        - style: a string like 'right-up', 'down-left', etc.
+            (Numpy.NDArray): Coordinates of output point of the arrow.
         """
         head_width = 0.15 if arrow else 0
 
