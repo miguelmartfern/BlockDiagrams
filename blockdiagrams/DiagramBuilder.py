@@ -544,20 +544,26 @@ class DiagramBuilder:
         return output_pos
 
     def __draw_combiner__(self, initial_position, height=1,
-                        input_text=None, operation='mult', input_side='bottom', 
+                        input_text=None, input_side='bottom', operation='mult', 
                         text_offset=0.1, signs=[None, None], fontsize=14, orientation='horizontal'):
         """
+        Inner method.
         Draws a combiner block: a circle with a multiplication sign (×), sum sign (+) 
-        or substraction sign (-) inside.
+        or substraction sign (-) inside, with optional signs on each input.
 
-        Parameters:
-        - intial_position: (x, y) coordinates of the starting point.
-        - length: total horizontal length (diameter of the circle).
-        - input_text: label for the bottom input arrow (below or above the arrow).
-        - operation: 'mult' for multiplication sign (×), 'sum' for addition sign (+), 'dif' for substraction sign (-).
-        - text_offset: vertical offset for input/output labels.
-        - fontsize: font size of the labels.
-        - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle.
+        Args:
+            initial_position (Numpy.NDarray or list): Coordinates of the starting point of the arrow.
+            height (float, optional): Vertical height of the block. If not entered, default `block_height` is used.
+            input_text (string, optional): Label for the input arrow (below or above the arrow).
+            input_side (string, optional): Side of the lateral input: {'bottom', 'top'}.
+            operation (string, optional): Operation of the combiner: {'mult', 'sum', 'dif'}.
+            text_offset (float, optional): Vertical offset for the text position.
+            signs (list, optional): Sign to be shown on the horizontal (signs[0]) and vertical (signs[1]) inputs.
+            fontsize (int, optional): font size of the text inside the block. If not entered, default `fontsize` is used.
+            orientation (string or float, optional): Direction of the block: {'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle}.
+
+        Returns:
+            (Numpy.NDArray): Coordinates of output point of the combiner.
         """
         angle = 0
         # Determine rotation angle based on orientation
@@ -678,22 +684,21 @@ class DiagramBuilder:
         return output_pos
 
     def __draw_mult_combiner__(self, initial_position, length, inputs, 
-                               operation='sum', side='bottom', 
-                               fontsize=14, orientation='horizontal'):
+                               operation='sum', orientation='horizontal'):
         """
+        Inner method.
         Draws a summation or multiplication block with multiple inputs distributed 
         along the left edge of a circle, from pi/2 to 3*pi/2. Inputs can have a sign.
 
-        Parameters:
-        - initial_position: (x, y) coordinates of the starting point.
-        - length: total horizontal length (diameter of the circle).
-        - inputs: list of tuples (x, y) or (x, y, sign)
-        # - output_text: label on the output arrow (on the right)
-        - position: center of the summation block (x0, y0)
-        - operation: 'sum' for addition, 'mult' for multiplication
-        # - text_offset: vertical offset for input/output labels.
-        - fontsize: font size of the labels.
-        - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', or angle.
+        Args:
+            initial_position (Numpy.NDarray or list): Coordinates of the starting point of the arrow.
+            length (float, optional): Horizontal length of the block. If not entered, default `block_length` is used.
+            inputs (list of tuples (x,y), or (x,y, sign)): List of coordinates of each input, with optional signs.
+            operation (string, optional): Operation of the combiner: {'mult', 'sum'}.
+            orientation (string or float, optional): Direction of the block: {'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle}.
+
+        Returns:
+            (Numpy.NDArray): Coordinates of output point of the combiner.
         """
         angle = 0
         # Determine rotation angle based on orientation
@@ -986,7 +991,6 @@ class DiagramBuilder:
             # Default arguments
             default_kwargs = {
                 'length': self.block_length,
-                'fontsize': self.fontsize,
                 'operation': 'mult',
                 'orientation': 'horizontal'
             }
