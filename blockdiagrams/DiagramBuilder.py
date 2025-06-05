@@ -116,7 +116,7 @@ class DiagramBuilder:
         Args:
             input_pos (Numpy.NDArray or list): Input position of the block.
             output_pos (Numpy.NDArray or list): Output position of the block.
-            Feedback_pos (Numpy.NDArray or list): Feedback port position of the block.
+            feedback_pos (Numpy.NDArray or list): Feedback port position of the block.
         """
         self.current_element += 1
             
@@ -1024,16 +1024,23 @@ class DiagramBuilder:
 
     def get_current_element(self):
         """
-        Returns the current element index.
+        Returns the current element index (last added).
+
+        Returns:
+            (int): Index of the last added element.
         """
         return self.current_element
     
     def get_position(self, element=None):
         """
-        Returns the positions of the specified element.
+        Returns the positions of the specified element index. If no element specified, last added element is used.
+        The return is a dictinoary with coordinates of `input_pos`, `output_pos` and `feedback_pos` (feedback port coordinates).
         
-        Parameters:
-        - element: number of the element.
+        Args:
+            element (int, optional): index of the element.
+        
+        Returns:
+            (dict of Tuples): Dictionary with three 2-element tuples: `input_pos`, `output_pos` and `feedback_pos`.
         """
         if element is None:
             return self.element_positions[self.current_element]
@@ -1044,7 +1051,10 @@ class DiagramBuilder:
 
     def get_thread_position(self, thread='main'):
         """
-        Returns the current position of the specified thread.
+        Returns the current output position of the specified thread.
+
+        Args:
+            thread (str, optional): Thread identifier.
         """
         if thread in self.thread_positions:
             return self.thread_positions[thread]
@@ -1054,12 +1064,17 @@ class DiagramBuilder:
         
     def show(self, margin=0.5, scale=1.0, savepath=None):
         """
-        Muestra o guarda el diagrama ajustando los límites al contenido.
+        Displays the current diagram or saves it to a file.
 
-        Parámetros:
-        - margin: margen alrededor del contenido.
-        - scale: factor de escala aplicado al tamaño de la imagen.
-        - savepath: si se proporciona, guarda la figura en lugar de mostrarla.
+        Adjusts the view to fit the full diagram with an optional margin and scaling factor.
+        If no elements have been drawn, simply displays an empty figure.
+
+        Args:
+            margin (float, optional): Margin to add around the diagram (in data units).
+            scale (float, optional): Scaling factor for the figure size.
+            savepath (str, optional): If provided, saves the figure to the specified path (e.g., 'diagram.png' or 'diagram.pdf').
+                                      If None, the diagram is shown in an interactive window.
+
         """
         bbox = self.__get_bbox__()
         if bbox is None:
