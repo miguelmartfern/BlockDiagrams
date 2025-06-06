@@ -2,3 +2,7 @@
 *.egg-info/
 __pycache__/
 *.py[cod]
+*.howto
+
+# Ignora la carpeta generada por MkDocs
+/site/

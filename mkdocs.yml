@@ -1,0 +1,26 @@
+site_name: BlockDiagrams
+site_description: "A Python library for drawing block diagrams with Matplotlib"
+site_author: "Miguel Á. Martín-Fernández"
+repo_url: https://github.com/miguelmartfern/BlockDiagrams
+repo_name: miguelmartfern/BlockDiagrams
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.top
+    - toc.integrate
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+
+nav:
+  - Home: index.md
+  - Reference:
+      - API Documentation: reference.md
