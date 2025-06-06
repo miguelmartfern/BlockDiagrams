@@ -3,7 +3,7 @@
 
 [![Documentation Status](https://img.shields.io/badge/docs-online-blue.svg)](https://miguelmartfern.github.io/BlockDiagrams/)
 
-**BlockDiagrams** is a lightweight Python library for drawing block diagrams with any orientation and several branches using Matplotlib. 
+**BlockDiagrams** is a lightweight Python library for drawing signal processing block diagrams with any orientation and several branches using Matplotlib. 
 
 It simplifies the visual creation of system and signal diagrams with functions to add blocks, lines, arrows, summation nodes, and multipliers.
 
