@@ -444,7 +444,7 @@ class DiagramBuilder:
 
         Args:
             initial_position (Numpy.NDarray or list): Coordinates of the starting point of the arrow.
-            final_pos (Numpy.NDarray or list): Coordinates of the ending point of the arrow.
+            final_position (Numpy.NDarray or list): Coordinates of the ending point of the arrow.
             text (string, optional): Label to display in the block.
             text_offset (float, optional): Vertical offset for the text position.
             arrow (bool, optional): Indicates if it must finish or not in an arrow.
@@ -814,8 +814,6 @@ class DiagramBuilder:
                 - 'mult_combiner': Combiner with multiple inputs.
             thread (str, optional): Thread identifier.
             position (tuple or str or None, optional): (x, y) position, 'auto' (for mult_combiner), or None to use current thread position.
-            orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
-            fontsize (int, optional): Text font size (defaults to `self.fontsize`).
             debug (bool, optional): If True, prints thread positions after placing the element.
 
         The `**kwargs` vary depending on the `kind`:
@@ -830,12 +828,16 @@ class DiagramBuilder:
             - length (float, optional): Block length (defaults to `self.block_length`).
             - height (float, optional): Block height (defaults to `self.block_height`)..
             - linestyle (str, optional): Block border line style (defaults to `-`).
+            - orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
+            - fontsize (int, optional): Text font size (defaults to `self.fontsize`).
 
         - **kind = 'arrow'**, **'input'**, **'output'** or **'line'**:
             - text (str, optional): Text on the arrow or line (defaults to `name`).
             - text_position (str, optional): 'above', 'below', 'before', or 'after' (defaults to 'above' for 'arrow' and 'line', 'before' for 'input', and 'after' for 'output').
             - text_offset (float, optional): Offset for text (defaults to 0.1).
             - length (float, optional): Arrow or line length (defaults to `self.block_length`).
+            - orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
+            - fontsize (int, optional): Text font size (defaults to `self.fontsize`).
 
         - **kind = 'angled_arrow'**:
             - text (str, optional): Text on the arrow or line (defaults to `name`).
@@ -844,6 +846,8 @@ class DiagramBuilder:
             - text_offset (float, optional): Offset for text (defaults to 0.1).
             - arrow (bool, optional): Indicates if it must finish or not in an arrow.
             - first_segment (string, optional): Drawing order: {'horizontal', 'vertical'}
+            - orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
+            - fontsize (int, optional): Text font size (defaults to `self.fontsize`).
 
         - **kind = 'combiner'**:
             - operation (string, optional): Operation of the combiner: {'mult', 'sum', 'dif'} (defaultds to 'mult').
@@ -852,15 +856,16 @@ class DiagramBuilder:
             - input_text (string, optional): Label for the input arrow (below or above the arrow).
             - text_offset (float, optional): Offset for text (defaults to 0.1).
             - signs (list, optional): Sign to be shown on the horizontal (signs[0]) and vertical (signs[1]) inputs.
+            - orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
+            - fontsize (int, optional): Text font size (defaults to `self.fontsize`).
 
         - **kind = 'mult_combiner'**:
             - operation (string, optional): Operation of the combiner: {'mult', 'sum', 'dif'} (defaults to 'mult').
             - length (float, optional): Total element length (defaults to `self.block_length`).
             - inputs (list of str): Thread names to combine.
             - operation (string, optional): Operation of the combiner: {'mult', 'sum'} (defaults to 'sum').
-
-        Returns:
-            None: Modifies the diagram in-place.
+            - orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
+            - fontsize (int, optional): Text font size (defaults to `self.fontsize`).
 
         Examples:
             >>> db = DiagramBuilder()
