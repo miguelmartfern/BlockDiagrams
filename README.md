@@ -58,10 +58,16 @@ v1.0:
 
 ## Installation
 
-The library is not yet published on PyPI. You can clone the repository directly and execute:
+The library is published on PyPI. You can install with:
+
+```
+pip install BlockDiagrams
+```
+
+Alternatively, especially if you want to contribute, clone the repository and run:
 
 ```bash
-git clone https://github.com/usuario/blockdiagrams.git
+git clone https://github.com/miguelmartfern/blockdiagrams.git
 cd blockdiagrams
 pip install -e .
 ```
