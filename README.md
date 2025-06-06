@@ -1,11 +1,13 @@
 
 # BlockDiagrams
 
+[![Documentation Status](https://img.shields.io/badge/docs-online-blue.svg)](https://miguelmartfern.github.io/BlockDiagrams/)
+
 **BlockDiagrams** is a lightweight Python library for drawing block diagrams with any orientation and several branches using Matplotlib. 
 
 It simplifies the visual creation of system and signal diagrams with functions to add blocks, lines, arrows, summation nodes, and multipliers.
 
-v1.4
+v1.5
 ---
 
 ## Features
@@ -24,7 +26,7 @@ v1.4
 v1.4:
 - Added support for feedback branches.
 - Added 'angled_arrow' element.
-- Elements positions accesible through new get_position() method: ('input_pos', 'output_pos' and 'feedback_pos')
+- Elements positions accesible through new get_position() method: ('input_pos', 'output_pos' and 'feedback_pos').
 
 v1.3:
 - Allow for different orientation of elements.
@@ -93,7 +95,7 @@ db.add("x_r(t)", kind="output")
 db.show(savepath = "diag1.png")
 ```
 
-![Block Diagram](notebooks/diag1.png)
+![Block Diagram](docs/notebooks/diag1.png)
 
 ---
 
@@ -130,7 +132,7 @@ db.add("h_c(t)", kind="block", text=None, text_below="h_c(t)", position=position
 db.show(savepath = "diag2.png")
 ```
 
-![Block Diagram](notebooks/diag2.png)
+![Block Diagram](docs/notebooks/diag2.png)
 
 ```python
 from blockdiagrams import DiagramBuilder
@@ -174,7 +176,7 @@ db.add("y(t)", kind="arrow", text_position='after')
 db.show(savepath = "diag3.png")
 ```
 
-![Block Diagram](notebooks/diag3.png)
+![Block Diagram](docs/notebooks/diag3.png)
 
 ```python
 from blockdiagrams import DiagramBuilder
@@ -211,7 +213,7 @@ db.add("y(t)", kind="output")
 db.show(savepath = "block_2_branches.png")
 ```
 
-![Block Diagram](notebooks/block_2_branches.png)
+![Block Diagram](docs/notebooks/block_2_branches.png)
 
 ```python
 from blockdiagrams import DiagramBuilder
@@ -234,7 +236,7 @@ db.add("x[n]", kind="output", orientation = angle)
 db.show(savepath = "block_vertical.png")
 ```
 
-![Block Diagram](notebooks/block_vertical.png)
+![Block Diagram](docs/notebooks/block_vertical.png)
 
 ```python
 from blockdiagrams import DiagramBuilder
@@ -268,12 +270,12 @@ db.add("z(t)", kind="angled_arrow", position=pos3, final_position=feedback_posit
 db.show(savepath = "feedback_diagram.png")
 ```
 
-![Block Diagram](notebooks/feedback_diagram.png)
+![Block Diagram](docs/notebooks/feedback_diagram.png)
 
 ## Additional examples
 
-[Additional examples notebook 1](notebooks/diag_examples.ipynb)
-[Additional examples notebook 2](notebooks/feedback_examples.ipynb)
+[Additional examples notebook 1](docs/notebooks/diag_examples.ipynb)
+[Additional examples notebook 2](docs/notebooks/feedback_examples.ipynb)
 
 ---
 
