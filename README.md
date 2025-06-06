@@ -23,9 +23,6 @@ v1.5
 
 ## New features
 
-v1.5:
-- Added API documentation.
-
 v1.4:
 - Added support for feedback branches.
 - Added 'angled_arrow' element.
