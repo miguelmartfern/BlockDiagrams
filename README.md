@@ -7,7 +7,7 @@
 
 It simplifies the visual creation of system and signal diagrams with functions to add blocks, lines, arrows, summation nodes, and multipliers.
 
-v1.4
+v1.4.1
 ---
 
 ## Features
