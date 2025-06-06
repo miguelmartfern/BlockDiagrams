@@ -8,9 +8,9 @@ long_description = (this_dir / "README.md").read_text(encoding="utf-8")
 setup(
     name='BlockDiagrams',
     version='1.4.1',
-    author='Miguel Martín Fernández',
-    author_email='miguelmartfern@gmail.com',
-    description='Librería ligera para dibujar diagramas de bloques en Python utilizando Matplotlib.',
+    author='Miguel Á. Martín-Fernández',
+    author_email='migmar@uva.es',
+    description='Lightweight library for drawing signal processing block diagrams with any orientation and several branches using Matplotlib',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/miguelmartfern/BlockDiagrams',
