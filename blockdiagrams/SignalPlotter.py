@@ -97,6 +97,7 @@ class SignalPlotter:
             'u':            sp.Heaviside,
             'rect':         lambda t: sp.Heaviside(t + 0.5) - sp.Heaviside(t - 0.5),
             'tri':          lambda t: (1 - abs(t)) * sp.Heaviside(1 - abs(t)),
+            'sinc':         lambda t: sp.sin(sp.pi * t) / (sp.pi * t),
             'delta':        sp.DiracDelta,
             'DiracDelta':   sp.DiracDelta,
             'Heaviside':    sp.Heaviside,
