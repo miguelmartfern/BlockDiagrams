@@ -3,6 +3,7 @@
 
 # SignalPlotter.py
 
+import re
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,19 +11,41 @@ from matplotlib.transforms import blended_transform_factory
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 
 class SignalPlotter:
-    def __init__(self, expr_str, var='t', horiz_range=(-5, 5), vert_range=None, num_points=1000,
+    def __init__(self, expr_str, horiz_range=(-5, 5), vert_range=None, num_points=1000,
                  figsize=(8, 3), tick_size_px=5,
                  xticks=None, yticks=None, xtick_labels=None, ytick_labels=None,
-                 save_path=None, show_plot=True, color='black'):
-        self.expr_str = expr_str
-        self.var = sp.Symbol(var)
+                 save_path=None, show_plot=True, color='black', periodo=None):
+        # parse expression of form "f(v)=..." or default
+        m = re.match(r"^(?P<fn>[^\W\d_]+)\((?P<vr>[^)]+)\)\s*=\s*(?P<ex>.+)$", expr_str)
+        if m:
+            self.func_name = m.group('fn')
+            var_name = m.group('vr')
+            expr_body = m.group('ex')
+        else:
+            self.func_name = 'x'
+            var_name = 't'
+            expr_body = expr_str
+
+        # Replace LaTeX-like variable names
+        replacements = {'\\omega': 'ω', '\\tau': 'τ'}
+        for latex_var, unicode_var in replacements.items():
+            var_name = var_name.replace(latex_var, unicode_var)
+            expr_body = expr_body.replace(latex_var, unicode_var)
+
+        self.expr_str = expr_body
+        self.var = sp.Symbol(var_name)
+
+        # store label names
+        self.xlabel = var_name
+        self.ylabel = self.func_name + '(' + var_name + ')'
+
         self.horiz_range = horiz_range
         self.vert_range = vert_range
         self.num_points = num_points
         self.figsize = figsize
         self.tick_size_px = tick_size_px
-
-        self.color =color
+        self.color = color
+        self.periodo = periodo
 
         # tick positions and labels
         self.xticks = np.array(xticks) if xticks is not None else None
@@ -50,17 +73,23 @@ class SignalPlotter:
 
         # Parse expression
         transformations = standard_transformations + (implicit_multiplication_application,)
-        self.expr = parse_expr(expr_str, local_dict=self.local_dict, transformations=transformations)
+        self.expr = parse_expr(expr_body, local_dict=self.local_dict, transformations=transformations)
 
         # Extract components
         self.expr_cont = self._remove_dirac_terms()
         self.impulse_locs, self.impulse_amps = self._extract_impulses()
 
-        # For plotting
-        self.t_vals = np.linspace(*self.horiz_range, self.num_points)
+        # Prepare t_vals with periodicity
+        t0, t1 = self.horiz_range
+        self.t_vals = np.linspace(t0, t1, self.num_points)
+        if self.periodo is not None:
+            T = self.periodo
+            self.t_vals = ((self.t_vals + T/2) % T) - T/2
+            self.t_vals.sort()
+
+        # create numeric function
         self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self.local_dict])
         self.fig, self.ax = plt.subplots(figsize=self.figsize)
-
         self._prepare_plot()
 
     def _get_local_dict(self):
@@ -72,22 +101,17 @@ class SignalPlotter:
             'DiracDelta':   sp.DiracDelta,
             'Heaviside':    sp.Heaviside,
             'pi':           sp.pi,
-            str(self.var):  self.var,
+            self.var.name:  self.var,
             'sin':          sp.sin,
             'cos':          sp.cos,
             'exp':          sp.exp,
             'Piecewise':    sp.Piecewise,
-            'pw':           sp.Piecewise,  # opcional, alias más corto
+            'pw':           sp.Piecewise,
         }
-    
+
+
     def _prepare_plot(self):
-        self.t_vals = np.linspace(self.horiz_range[0], self.horiz_range[1], self.num_points)
-
-        # Extraer impulsos y expresión continua
-        self.impulse_locs, self.impulse_amps = self._extract_impulses()
-        self.expr_cont = self._remove_dirac_terms()
-        self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy"])
-
+        # recompute y-range
         try:
             y_vals = self.func(self.t_vals)
             y_vals = np.array(y_vals, dtype=np.float64)
@@ -97,8 +121,7 @@ class SignalPlotter:
             else:
                 self.y_min, self.y_max = np.min(y_vals), np.max(y_vals)
             if abs(self.y_max - self.y_min) < 1e-2:
-                self.y_min -= 1
-                self.y_max += 1
+                self.y_min -= 1; self.y_max += 1
         except Exception:
             self.y_min, self.y_max = -1, 1
 
@@ -122,13 +145,63 @@ class SignalPlotter:
         return self.expr.replace(lambda expr: expr.has(sp.DiracDelta), lambda _: 0)
 
     def draw_function(self):
-        if self.expr_cont == 0:
-            y_plot = np.zeros_like(self.t_vals)
+        """
+        Dibuja la señal continua. Si 'periodo' está definido, repite la forma de onda en todo el rango horizontal.
+        Añade puntos suspensivos en los extremos si la señal está truncada.
+        """
+        # preparar datos de trazado
+        t0, t1 = self.horiz_range
+        if self.periodo is None:
+            t_plot = self.t_vals
+            y_plot = self.func(t_plot)
         else:
-            y_plot = self.func(self.t_vals)
-            if np.isscalar(y_plot):
-                y_plot = np.full_like(self.t_vals, y_plot, dtype=float)
-        self.ax.plot(self.t_vals, y_plot, color=self.color, linewidth=2.5, zorder=5)
+            # señal periódica
+            T = self.periodo
+            base_t = np.linspace(-T/2, T/2, self.num_points)
+            base_y = self.func(base_t)
+            k_min = int(np.floor((t0 + T/2)/T))
+            k_max = int(np.floor((t1 + T/2)/T))
+            segs = []
+            for k in range(k_min, k_max+1):
+                t_seg = base_t + k*T
+                mask = (t_seg >= t0) & (t_seg <= t1)
+                segs.append((t_seg[mask], np.array(base_y)[mask]))
+            # concatenar y ordenar
+            t_plot = np.concatenate([seg[0] for seg in segs])
+            y_plot = np.concatenate([seg[1] for seg in segs])
+            order = np.argsort(t_plot)
+            t_plot = t_plot[order]
+            y_plot = y_plot[order]
+        # asegurar arrays
+        t_plot = np.array(t_plot)
+        y_plot = np.array(y_plot)
+        if y_plot.ndim == 0:
+            y_plot = np.full_like(t_plot, y_plot, dtype=float)
+        # dibujar la curva
+        self.ax.plot(t_plot, y_plot, color=self.color, linewidth=2.5, zorder=5)
+
+                # decidir puntos suspensivos mediante integración si no es periódica
+        delta = (t1 - t0) * 0.05
+        tol = 1e-3
+        span = t1 - t0
+        draw_left = draw_right = False
+        if self.periodo is not None:
+            draw_left = draw_right = True
+        else:
+            N = max(10, int(0.05*self.num_points))
+            xs_left = np.linspace(t0 - 0.05*span, t0, N)
+            ys_left = np.abs(self.func(xs_left))
+            if np.trapz(ys_left, xs_left) > tol:
+                draw_left = True
+            xs_right = np.linspace(t1, t1 + 0.05*span, N)
+            ys_right = np.abs(self.func(xs_right))
+            if np.trapz(ys_right, xs_right) > tol:
+                draw_right = True
+        y_mid = (self.y_min + 2 * self.y_max)/3
+        if draw_left:
+            self.ax.text(t0 - delta, y_mid, '$\cdots$', ha='left', va='center', color=self.color, fontsize=14, zorder=10)
+        if draw_right:
+            self.ax.text(t1 + delta, y_mid, '$\cdots$', ha='right', va='center', color=self.color,fontsize=14, zorder=10)
 
     def draw_impulses(self):
         for t0, amp in zip(self.impulse_locs, self.impulse_amps):
@@ -271,12 +344,12 @@ class SignalPlotter:
         # Etiqueta eje X: un poco a la derecha del límite derecho del eje x
         x_pos = x_lim[1] - 0.01 * (x_lim[1] - x_lim[0])
         y_pos = 0.02 * (y_lim[1] - y_lim[0])
-        self.ax.text(x_pos, y_pos, f'${self.var}$', fontsize=16, ha='right', va='bottom')
+        self.ax.text(x_pos, y_pos, f'${self.xlabel}$', fontsize=16, ha='right', va='bottom')
 
         # Etiqueta eje Y: un poco por debajo del límite superior del eje y (pero dentro)
         x_pos = 0.01 * (x_lim[1] - x_lim[0])
         y_pos = y_lim[1] - 0.1 * (y_lim[1] - y_lim[0])
-        self.ax.text(x_pos, y_pos, rf'$x({self.var})$', fontsize=16, ha='left', va='bottom', rotation=0)
+        self.ax.text(x_pos, y_pos, f'${self.ylabel}$', fontsize=16, ha='left', va='bottom', rotation=0)
 
     def show(self):
         self.ax.grid(False)
