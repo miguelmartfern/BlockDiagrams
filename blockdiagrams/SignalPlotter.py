@@ -13,7 +13,7 @@ class SignalPlotter:
     def __init__(self, expr_str, var='t', horiz_range=(-5, 5), vert_range=None, num_points=1000,
                  figsize=(8, 3), tick_size_px=5,
                  xticks=None, yticks=None, xtick_labels=None, ytick_labels=None,
-                 save_path=None, show_plot=True):
+                 save_path=None, show_plot=True, color='black'):
         self.expr_str = expr_str
         self.var = sp.Symbol(var)
         self.horiz_range = horiz_range
@@ -21,6 +21,8 @@ class SignalPlotter:
         self.num_points = num_points
         self.figsize = figsize
         self.tick_size_px = tick_size_px
+
+        self.color =color
 
         # tick positions and labels
         self.xticks = np.array(xticks) if xticks is not None else None
@@ -63,17 +65,19 @@ class SignalPlotter:
 
     def _get_local_dict(self):
         return {
-            'u': sp.Heaviside,
-            'rect': lambda t: sp.Heaviside(t + 0.5) - sp.Heaviside(t - 0.5),
-            'tri': lambda t: (1 - abs(t)) * sp.Heaviside(1 - abs(t)),
-            'delta': sp.DiracDelta,
-            'DiracDelta': sp.DiracDelta,
-            'Heaviside': sp.Heaviside,
-            'pi': sp.pi,
-            str(self.var): self.var,
-            'sin': sp.sin,
-            'cos': sp.cos,
-            'exp': sp.exp
+            'u':            sp.Heaviside,
+            'rect':         lambda t: sp.Heaviside(t + 0.5) - sp.Heaviside(t - 0.5),
+            'tri':          lambda t: (1 - abs(t)) * sp.Heaviside(1 - abs(t)),
+            'delta':        sp.DiracDelta,
+            'DiracDelta':   sp.DiracDelta,
+            'Heaviside':    sp.Heaviside,
+            'pi':           sp.pi,
+            str(self.var):  self.var,
+            'sin':          sp.sin,
+            'cos':          sp.cos,
+            'exp':          sp.exp,
+            'Piecewise':    sp.Piecewise,
+            'pw':           sp.Piecewise,  # opcional, alias más corto
         }
     
     def _prepare_plot(self):
@@ -124,12 +128,12 @@ class SignalPlotter:
             y_plot = self.func(self.t_vals)
             if np.isscalar(y_plot):
                 y_plot = np.full_like(self.t_vals, y_plot, dtype=float)
-        self.ax.plot(self.t_vals, y_plot, color='black', linewidth=2.5, zorder=5)
+        self.ax.plot(self.t_vals, y_plot, color=self.color, linewidth=2.5, zorder=5)
 
     def draw_impulses(self):
         for t0, amp in zip(self.impulse_locs, self.impulse_amps):
             self.ax.annotate('', xy=(t0, amp), xytext=(t0, 0),
-                            arrowprops=dict(facecolor='black', shrink=0.05, width=1.5, headwidth=8))
+                            arrowprops=dict(facecolor=self.color, shrink=0.05, width=1.5, headwidth=8))
             self.ax.text(t0, amp + 0.1 * np.sign(amp), f'{amp:g}', ha='center',
                         va='bottom' if amp > 0 else 'top', fontsize=11)
 
@@ -247,7 +251,7 @@ class SignalPlotter:
             else:
                 offset = (0, -8)
             self.ax.annotate(f'${lbl}$', xy=(x, 0), xycoords='data', textcoords='offset points',
-                             xytext=offset, ha='center', va='top', fontsize=12)
+                             xytext=offset, ha='center', va='top', fontsize=12, zorder=10)
 
         # dibujar ticks Y (centrados en x=0)
         for y, lbl in zip(yticks_final, ylabels):
