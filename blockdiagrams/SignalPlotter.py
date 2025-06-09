@@ -9,6 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.transforms import blended_transform_factory
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
+import matplotlib.animation as animation
+from IPython.display import HTML
 
 class SignalPlotter:
     def __init__(self, expr_str, horiz_range=(-5, 5), vert_range=None, num_points=1000,
@@ -77,7 +79,7 @@ class SignalPlotter:
 
         # Extract components
         self.expr_cont = self._remove_dirac_terms()
-        self.impulse_locs, self.impulse_amps = self._extract_impulses()
+        self.impulse_locs, self.impulse_areas = self._extract_impulses()
 
         # Prepare t_vals with periodicity
         t0, t1 = self.horiz_range
@@ -107,7 +109,7 @@ class SignalPlotter:
             'cos':          sp.cos,
             'exp':          sp.exp,
             'Piecewise':    sp.Piecewise,
-            'pw':           sp.Piecewise,
+            'pw':           sp.Piecewise
         }
 
 
@@ -120,27 +122,53 @@ class SignalPlotter:
             if self.vert_range:
                 self.y_min, self.y_max = self.vert_range
             else:
-                self.y_min, self.y_max = np.min(y_vals), np.max(y_vals)
+                min_y = np.min(y_vals) if y_vals.size > 0 else 0
+                max_y = np.max(y_vals) if y_vals.size > 0 else 0
+                # incluir amplitudes (áreas) de deltas
+                if self.impulse_areas:
+                    min_y = min(min_y, 0)  # asegurar que el eje base esté visible
+                    max_y = max(max_y, max(self.impulse_areas))
+                if abs(max_y - min_y) < 1e-2:
+                    min_y -= 1
+                    max_y += 1
+                self.y_min, self.y_max = min_y, max_y
             if abs(self.y_max - self.y_min) < 1e-2:
                 self.y_min -= 1; self.y_max += 1
         except Exception:
             self.y_min, self.y_max = -1, 1
+    
+    def _eval_func_array(self, t):
+        y = self.func(t)
+        return np.full_like(t, y, dtype=float) if np.isscalar(y) else np.array(y, dtype=float)
 
     def _extract_impulses(self):
         impulse_locs = []
-        impulse_amps = []
+        impulse_areas = []
         expr_terms = self.expr.as_ordered_terms()
 
         for term in expr_terms:
             deltas = term.atoms(sp.DiracDelta)
-            for d in deltas:
-                arg = d.args[0]
+            for delta in deltas:
+                arg = delta.args[0]
                 roots = sp.solve(arg, self.var)
-                amp = term.coeff(d)
+                amp = term.coeff(delta)
+
+                # derivar factor de escalado de la delta
+                d_arg = sp.diff(arg, self.var)
+                scale = sp.Abs(d_arg)
+
                 for r in roots:
+                    # Evaluar el valor de escala en el punto r
+                    try:
+                        scale_val = float(scale.subs(self.var, r))
+                    except Exception:
+                        scale_val = 1.0  # fallback si no evaluable
+
+                    effective_amp = float(amp) / scale_val if scale_val != 0 else 0.0
                     impulse_locs.append(float(r))
-                    impulse_amps.append(float(amp))
-        return impulse_locs, impulse_amps
+                    impulse_areas.append(effective_amp)
+
+        return impulse_locs, impulse_areas
 
     def _remove_dirac_terms(self):
         return self.expr.replace(lambda expr: expr.has(sp.DiracDelta), lambda _: 0)
@@ -154,7 +182,7 @@ class SignalPlotter:
         t0, t1 = self.horiz_range
         if self.periodo is None:
             t_plot = self.t_vals
-            y_plot = self.func(t_plot)
+            y_plot = self._eval_func_array(t_plot)
         else:
             # señal periódica
             T = self.periodo
@@ -181,7 +209,7 @@ class SignalPlotter:
         # dibujar la curva
         self.ax.plot(t_plot, y_plot, color=self.color, linewidth=2.5, zorder=5)
 
-                # decidir puntos suspensivos mediante integración si no es periódica
+        # decidir puntos suspensivos mediante integración si no es periódica
         delta = (t1 - t0) * 0.05
         tol = 1e-3
         span = t1 - t0
@@ -191,25 +219,40 @@ class SignalPlotter:
         else:
             N = max(10, int(0.05*self.num_points))
             xs_left = np.linspace(t0 - 0.05*span, t0, N)
-            ys_left = np.abs(self.func(xs_left))
+            ys_left = np.abs(self._eval_func_array(xs_left))
             if np.trapz(ys_left, xs_left) > tol:
                 draw_left = True
             xs_right = np.linspace(t1, t1 + 0.05*span, N)
-            ys_right = np.abs(self.func(xs_right))
+            ys_right = np.abs(self._eval_func_array(xs_right))
             if np.trapz(ys_right, xs_right) > tol:
                 draw_right = True
         y_mid = (self.y_min + 2 * self.y_max)/3
         if draw_left:
-            self.ax.text(t0 - delta, y_mid, '$\cdots$', ha='left', va='center', color=self.color, fontsize=14, zorder=10)
+            self.ax.text(t0 - delta, y_mid, r'$\cdots$', ha='left', va='center', color=self.color, fontsize=14, zorder=10)
         if draw_right:
-            self.ax.text(t1 + delta, y_mid, '$\cdots$', ha='right', va='center', color=self.color,fontsize=14, zorder=10)
+            self.ax.text(t1 + delta, y_mid, r'$\cdots$', ha='right', va='center', color=self.color,fontsize=14, zorder=10)
 
     def draw_impulses(self):
-        for t0, amp in zip(self.impulse_locs, self.impulse_amps):
-            self.ax.annotate('', xy=(t0, amp), xytext=(t0, 0),
-                            arrowprops=dict(facecolor=self.color, shrink=0.05, width=1.5, headwidth=8))
-            self.ax.text(t0, amp + 0.1 * np.sign(amp), f'{amp:g}', ha='center',
-                        va='bottom' if amp > 0 else 'top', fontsize=11)
+        for t0, amp in zip(self.impulse_locs, self.impulse_areas):
+            self.ax.annotate(
+                '', xy=(t0, amp), xytext=(t0, 0),
+                arrowprops=dict(
+                    arrowstyle='-|>',
+                    linewidth=2.5,
+                    color=self.color,
+                    mutation_scale=16
+                ),
+                zorder=10
+            )
+            self.ax.text(
+                t0, amp + 0.05 * np.sign(amp),
+                f'{amp:g}',
+                ha='center',
+                va='bottom' if amp > 0 else 'top',
+                fontsize=12,
+                color=self.color,
+                zorder=10
+            )
 
     def setup_axes(self):
         for spine in self.ax.spines.values():
@@ -324,7 +367,7 @@ class SignalPlotter:
                 offset = (-8, -8)  # desplazar más hacia abajo
             else:
                 offset = (0, -8)
-            self.ax.annotate(f'${lbl}$', xy=(x, 0), xycoords='data', textcoords='offset points',
+            self.ax.annotate(rf'${lbl}$', xy=(x, 0), xycoords='data', textcoords='offset points',
                              xytext=offset, ha='center', va='top', fontsize=12, zorder=10)
 
         # dibujar ticks Y (centrados en x=0)
@@ -335,7 +378,7 @@ class SignalPlotter:
                 offset = (-8, -8)  # desplazar más a la derecha
             else:
                 offset = (-8, 0)
-            self.ax.annotate(f'${lbl}$', xy=(0, y), xycoords='data', textcoords='offset points',
+            self.ax.annotate(rf'${lbl}$', xy=(0, y), xycoords='data', textcoords='offset points',
                              xytext=offset, ha='right', va='center', fontsize=12)
 
     def draw_labels(self):
@@ -345,12 +388,12 @@ class SignalPlotter:
         # Etiqueta eje X: un poco a la derecha del límite derecho del eje x
         x_pos = x_lim[1] - 0.01 * (x_lim[1] - x_lim[0])
         y_pos = 0.02 * (y_lim[1] - y_lim[0])
-        self.ax.text(x_pos, y_pos, f'${self.xlabel}$', fontsize=16, ha='right', va='bottom')
+        self.ax.text(x_pos, y_pos, rf'${self.xlabel}$', fontsize=16, ha='right', va='bottom')
 
         # Etiqueta eje Y: un poco por debajo del límite superior del eje y (pero dentro)
         x_pos = 0.01 * (x_lim[1] - x_lim[0])
         y_pos = y_lim[1] - 0.1 * (y_lim[1] - y_lim[0])
-        self.ax.text(x_pos, y_pos, f'${self.ylabel}$', fontsize=16, ha='left', va='bottom', rotation=0)
+        self.ax.text(x_pos, y_pos, rf'${self.ylabel}$', fontsize=16, ha='left', va='bottom', rotation=0)
 
     def show(self):
         self.ax.grid(False)
@@ -368,3 +411,93 @@ class SignalPlotter:
         self.draw_ticks()
         self.draw_labels()
         self.show()
+
+    # def animate_signal(self, interval=20, save_path=None):
+    #     """
+    #     Anima la señal mostrando cómo se dibuja progresivamente desde el inicio al final del rango horizontal.
+    #     Parámetros:
+    #     - interval: tiempo en ms entre frames
+    #     - save_path: si se proporciona, guarda la animación en ese archivo (mp4 o gif)
+    #     """
+    #     # Preparar datos base para la animación (igual que en draw_function, con periodicidad)
+    #     t0, t1 = self.horiz_range
+    #     if self.periodo is None:
+    #         t_plot = self.t_vals
+    #         y_plot = self._eval_func_array(t_plot)
+    #     else:
+    #         T = self.periodo
+    #         base_t = np.linspace(-T/2, T/2, self.num_points)
+    #         base_y = self.func(base_t)
+    #         k_min = int(np.floor((t0 + T/2)/T))
+    #         k_max = int(np.floor((t1 + T/2)/T))
+    #         segs_t = []
+    #         segs_y = []
+    #         for k in range(k_min, k_max+1):
+    #             t_seg = base_t + k*T
+    #             mask = (t_seg >= t0) & (t_seg <= t1)
+    #             segs_t.append(t_seg[mask])
+    #             segs_y.append(np.array(base_y)[mask])
+    #         t_plot = np.concatenate(segs_t)
+    #         y_plot = np.concatenate(segs_y)
+    #         order = np.argsort(t_plot)
+    #         t_plot = t_plot[order]
+    #         y_plot = y_plot[order]
+
+    #     # Asegurar numpy arrays y formato adecuado
+    #     t_plot = np.array(t_plot)
+    #     y_plot = np.array(y_plot)
+    #     if y_plot.ndim == 0:
+    #         y_plot = np.full_like(t_plot, y_plot, dtype=float)
+
+    #     # Crear la figura y ejes igual que en self.fig, self.ax
+    #     fig, ax = self.fig, self.ax
+
+    #     # Limpiar ejes para animar
+    #     ax.clear()
+    #     self.setup_axes()  # configura ejes y flechas
+    #     self.draw_impulses()  # dibuja impulsos fijos
+
+    #     # Línea para la animación (vacía al principio)
+    #     line, = ax.plot([], [], color=self.color, linewidth=2.5, zorder=5)
+
+    #     # Función de inicialización para FuncAnimation
+    #     def init():
+    #         line.set_data([], [])
+    #         return (line,)
+
+    #     # Función de actualización para cada frame
+    #     def update(frame):
+    #         # frame es índice del punto final a dibujar
+    #         i = frame
+    #         if i == 0:
+    #             xdata = []
+    #             ydata = []
+    #         else:
+    #             xdata = t_plot[:i]
+    #             ydata = y_plot[:i]
+    #         line.set_data(xdata, ydata)
+    #         return (line,)
+
+    #     # Número de frames es la cantidad de puntos
+    #     frames = len(t_plot)
+
+    #     # Crear animación
+    #     ani = animation.FuncAnimation(fig, update, frames=frames, init_func=init,
+    #                                 blit=True, interval=interval, repeat=False)
+
+    #     # Guardar si se indica
+    #     if save_path is not None:
+    #         ext = save_path.split('.')[-1].lower()
+    #         if ext in ['mp4', 'avi', 'mov']:
+    #             ani.save(save_path, writer='ffmpeg', fps=1000/interval)
+    #         elif ext in ['gif']:
+    #             ani.save(save_path, writer='pillow', fps=1000/interval)
+    #         else:
+    #             raise ValueError("Extensión de archivo no soportada para guardar la animación")
+
+    #     # Mostrar animación en notebook si no se guarda y está en entorno interactivo
+    #     try:
+    #         from IPython.display import HTML
+    #         return HTML(ani.to_jshtml())
+    #     except ImportError:
+    #         plt.show()
