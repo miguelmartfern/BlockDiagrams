@@ -15,8 +15,8 @@ from IPython.display import HTML
 class SignalPlotter:
     def __init__(self, expr_str, horiz_range=(-5, 5), vert_range=None, num_points=1000,
                  figsize=(8, 3), tick_size_px=5,
-                 xticks=None, yticks=None, xtick_labels=None, ytick_labels=None,
-                 save_path=None, show_plot=True, color='black', periodo=None):
+                 xticks='auto', yticks='auto', xtick_labels=None, ytick_labels=None,
+                 save_path=None, show_plot=True, color='black', alpha=0.5, periodo=None):
         # parse expression of form "f(v)=..." or default
         m = re.match(r"^(?P<fn>[^\W\d_]+)\((?P<vr>[^)]+)\)\s*=\s*(?P<ex>.+)$", expr_str)
         if m:
@@ -27,6 +27,9 @@ class SignalPlotter:
             self.func_name = 'x'
             var_name = 't'
             expr_body = expr_str
+
+        # Transparence for labels
+        self.alpha = alpha
 
         # Replace LaTeX-like variable names
         replacements = {'\\omega': 'ω', '\\tau': 'τ'}
@@ -49,9 +52,19 @@ class SignalPlotter:
         self.color = color
         self.periodo = periodo
 
-        # tick positions and labels
-        self.xticks = np.array(xticks) if xticks is not None else None
-        self.yticks = np.array(yticks) if yticks is not None else None
+        # Guardar argumento original para diferenciar None / [] / 'auto'
+        self.init_xticks_arg = xticks
+        self.init_yticks_arg = yticks
+
+        # Luego convertir solo si es lista/tupla/array no vacío
+        if isinstance(xticks, (list, tuple, np.ndarray)) and len(xticks) > 0:
+            self.xticks = np.array(xticks)
+        else:
+            self.xticks = None
+        if isinstance(yticks, (list, tuple, np.ndarray)) and len(yticks) > 0:
+            self.yticks = np.array(yticks)
+        else:
+            self.yticks = None
         self.xtick_labels = xtick_labels
         self.ytick_labels = ytick_labels
 
@@ -122,21 +135,40 @@ class SignalPlotter:
             if self.vert_range:
                 self.y_min, self.y_max = self.vert_range
             else:
-                min_y = np.min(y_vals) if y_vals.size > 0 else 0
-                max_y = np.max(y_vals) if y_vals.size > 0 else 0
-                # incluir amplitudes (áreas) de deltas
+                # Valores continuos
+                if y_vals.size > 0:
+                    cont_min = np.min(y_vals)
+                    cont_max = np.max(y_vals)
+                else:
+                    cont_min = 0.0
+                    cont_max = 0.0
+
+                # Impulsos
                 if self.impulse_areas:
-                    min_y = min(min_y, 0)  # asegurar que el eje base esté visible
-                    max_y = max(max_y, max(self.impulse_areas))
-                if abs(max_y - min_y) < 1e-2:
-                    min_y -= 1
-                    max_y += 1
-                self.y_min, self.y_max = min_y, max_y
+                    imp_min = min(self.impulse_areas)
+                    imp_max = max(self.impulse_areas)
+                    # El rango debe abarcar ambos:
+                    overall_min = min(cont_min, imp_min, 0.0)
+                    overall_max = max(cont_max, imp_max, 0.0)
+                else:
+                    overall_min = min(cont_min, 0.0)
+                    overall_max = max(cont_max, 0.0)
+
+                # Si el rango es muy pequeño, expandir un poco para visibilidad
+                if abs(overall_max - overall_min) < 1e-2:
+                    overall_min -= 1.0
+                    overall_max += 1.0
+
+                self.y_min, self.y_max = overall_min, overall_max
+
+            # Segunda comprobación para evitar rango nulo o casi nulo
             if abs(self.y_max - self.y_min) < 1e-2:
-                self.y_min -= 1; self.y_max += 1
+                self.y_min -= 1.0
+                self.y_max += 1.0
         except Exception:
             self.y_min, self.y_max = -1, 1
-    
+
+
     def _eval_func_array(self, t):
         y = self.func(t)
         return np.full_like(t, y, dtype=float) if np.isscalar(y) else np.array(y, dtype=float)
@@ -187,7 +219,7 @@ class SignalPlotter:
             # señal periódica
             T = self.periodo
             base_t = np.linspace(-T/2, T/2, self.num_points)
-            base_y = self.func(base_t)
+            base_y = self._eval_func_array(base_t)
             k_min = int(np.floor((t0 + T/2)/T))
             k_max = int(np.floor((t1 + T/2)/T))
             segs = []
@@ -233,26 +265,80 @@ class SignalPlotter:
             self.ax.text(t1 + delta, y_mid, r'$\cdots$', ha='right', va='center', color=self.color,fontsize=14, zorder=10)
 
     def draw_impulses(self):
-        for t0, amp in zip(self.impulse_locs, self.impulse_areas):
-            self.ax.annotate(
-                '', xy=(t0, amp), xytext=(t0, 0),
-                arrowprops=dict(
-                    arrowstyle='-|>',
-                    linewidth=2.5,
-                    color=self.color,
-                    mutation_scale=16
-                ),
-                zorder=10
-            )
-            self.ax.text(
-                t0, amp + 0.05 * np.sign(amp),
-                f'{amp:g}',
-                ha='center',
-                va='bottom' if amp > 0 else 'top',
-                fontsize=12,
+        """
+        Dibuja los impulsos (Dirac) en las ubicaciones extraídas de la expresión.
+        Si 'periodo' está definido, repite cada impulso en t0 + k*T dentro del rango horizontal.
+        """
+        # Rango horizontal
+        t_min, t_max = self.horiz_range
+        # Período
+        T = self.periodo
+
+        for base_t0, amp in zip(self.impulse_locs, self.impulse_areas):
+            if T is None:
+                # Sin periodicidad: dibujar solo en la ubicación base
+                if t_min <= base_t0 <= t_max:
+                    self._draw_single_impulse(base_t0, amp)
+            else:
+                # Señal periódica: calcular k_min y k_max de forma que t0 + kT esté en [t_min, t_max]
+                # Queremos k tales que: t_min <= base_t0 + k*T <= t_max
+                # => (t_min - base_t0)/T <= k <= (t_max - base_t0)/T
+                # Se toman los enteros entre floor(...) a ceil(...).
+                k_min = int(np.floor((t_min - base_t0) / T))
+                k_max = int(np.ceil((t_max - base_t0) / T))
+                for k in range(k_min, k_max + 1):
+                    t_k = base_t0 + k * T
+                    if t_min <= t_k <= t_max:
+                        self._draw_single_impulse(t_k, amp)
+
+    def _draw_single_impulse(self, t0, amp):
+        """
+        Dibuja un único impulso en t0 con amplitud amp.
+        Si t0 está cerca de 0, desplaza la etiqueta ligeramente a la izquierda
+        para que no quede sobre el eje vertical.
+        """
+        # Flecha desde (t0,0) hasta (t0, amp)
+        self.ax.annotate(
+            '', xy=(t0, amp), xytext=(t0, 0),
+            arrowprops=dict(
+                arrowstyle='-|>',
+                linewidth=2.5,
                 color=self.color,
-                zorder=10
-            )
+                mutation_scale=16
+            ),
+            zorder=10
+        )
+
+        # Calcular desplazamiento horizontal de la etiqueta si t0 ≈ 0
+        x_min, x_max = self.ax.get_xlim()
+        x_range = x_max - x_min
+        # Umbral para considerar que t0 es “casi” cero:
+        tol = 1e-6 * max(1.0, abs(x_range))
+        if abs(t0) < tol:
+            # Desplazar la etiqueta un 2% del rango horizontal hacia la izquierda
+            x_offset = -0.02 * x_range
+            ha = 'right'
+        else:
+            x_offset = 0.0
+            ha = 'center'
+
+        # Desplazamiento vertical normal: ligeramente por encima (o debajo) de amp
+        y_offset = 0.03 * np.sign(amp)
+        # Ubicación final de la etiqueta
+        x_text = t0 + x_offset
+        y_text = amp + y_offset
+
+        self.ax.text(
+            x_text, y_text,
+            f'{amp:g}',
+            ha=ha,
+            va='bottom' if amp > 0 else 'top',
+            fontsize=12,
+            color=self.color,
+            fontweight='bold',
+            zorder=10
+        )
+
 
     def setup_axes(self):
         for spine in self.ax.spines.values():
@@ -260,11 +346,24 @@ class SignalPlotter:
 
         self.ax.set_xticks([])
         self.ax.set_yticks([])
+        
+        # Rango horizontal
+        x0, x1 = self.horiz_range
+        x_range = x1 - x0
+        x_margin = 0.2 * x_range  # puedes ajustar si quieres cambiar la extensión horizontal
 
-        x_margin = 0.2 * (self.horiz_range[1] - self.horiz_range[0])
-        y_margin = 0.2 * (self.y_max - self.y_min)
+        # Rango vertical original calculado en _prepare_plot: self.y_min, self.y_max
+        y_min, y_max = self.y_min, self.y_max
+        y_range = y_max - y_min
+        # Extensión de un 10% adicional por cada lado => total 1.2×
+        if y_range <= 0:
+            # En caso degenerate, mantener un rango mínimo
+            y_margin = 1.0
+        else:
+            y_margin = 0.2 * y_range
+
         self.ax.set_xlim(self.horiz_range[0] - x_margin, self.horiz_range[1] + x_margin)
-        self.ax.set_ylim(self.y_min - y_margin, self.y_max + y_margin)
+        self.ax.set_ylim(self.y_min - y_margin, self.y_max + 1.3 * y_margin)
 
         self.ax.annotate('', xy=(self.ax.get_xlim()[1], 0), xytext=(self.ax.get_xlim()[0], 0),
                          arrowprops=dict(arrowstyle='-|>', linewidth=1.5, color='black',
@@ -276,110 +375,271 @@ class SignalPlotter:
         
         self.fig.tight_layout()
 
+
     def draw_ticks(self,
-                   tick_size_px=None,
-                   xticks='auto',
-                   yticks='auto',
-                   xtick_labels='auto',
-                   ytick_labels='auto'):
+                tick_size_px=None,
+                xticks=None,
+                yticks=None,
+                xtick_labels='auto',
+                ytick_labels='auto'):
         """
         Dibuja las marcas de los ejes centradas en las líneas de los ejes.
         Parámetros:
-         - tick_size_px: tamaño del tick en píxeles (por defecto self.tick_size_px)
-         - xticks, yticks: 'auto' (por defecto de init o cálculo), lista de posiciones, o None (sin ticks)
-         - xtick_labels, ytick_labels: 'auto' (por defecto de init o numérico), lista de etiquetas o None
+        - tick_size_px: tamaño del tick en píxeles (por defecto self.tick_size_px).
+        - xticks, yticks: None, 'auto', lista de posiciones.
+            * Si xticks es None en esta llamada, usa lo que se pasó en init (self.init_xticks_arg).
+            * Si xticks es 'auto', comportamiento automático:
+                - En X: si en init hubo lista no vacía, úsala como base y combina con impulsos periódicos;
+                si no hubo pero existen impulsos, muestra solo posiciones periódicas;
+                si no hay ni init ni impulsos, genera 5 equiespaciados.
+                - En Y: si en init hubo lista no vacía, úsala; si no, genera 3 equiespaciados entre floor(y_min) y ceil(y_max).
+            * Si xticks es lista en esta llamada, la usa como manual y en X la combina con impulsos; en Y, solo usa la lista.
+        - xtick_labels, ytick_labels: 'auto' (etiquetas por defecto) o lista de mismas longitudes que xticks/yticks manuales.
+        Comportamiento extra:
+        - Los impulsos periódicos afectan solo al eje X: se repiten según self.periodo.
+        - El offset vertical de la etiqueta de un xtick: si coincide con impulso de área<0 → etiqueta encima del eje; área>=0 o no impulso → debajo.
+        - Si se dibuja un xtick en 0, no mostrar el ytick en 0 (filtrado posterior).
+        - Se eliminan duplicados con tolerancia relativa y se ordenan.
         """
-        # tamaño de tick en px
+        # 0. Determinar “effective_xticks”: si xticks param es None, usar init_xticks_arg; si no, usar xticks
+        effective_xticks = xticks if xticks is not None else getattr(self, 'init_xticks_arg', None)
+        effective_yticks = yticks if yticks is not None else getattr(self, 'init_yticks_arg', None)
+
+        # 1. Configuración inicial de tamaño del tick en px
         tick_px = tick_size_px if tick_size_px is not None else self.tick_size_px
 
-        # ---- POSICIONES RAW ----
-        if xticks is None:
+        # 2. Rango horizontal y tolerancia relativa para floats
+        t_min, t_max = self.horiz_range
+        tol = 1e-8 * max(1.0, abs(t_max - t_min))
+
+        # 3. Calcular posiciones periódicas de impulsos en X dentro de [t_min, t_max]
+        impulse_positions = []
+        impulse_positions_areas = []
+        if self.impulse_locs:
+            if self.periodo is None:
+                for base_loc, base_area in zip(self.impulse_locs, self.impulse_areas):
+                    if t_min - tol <= base_loc <= t_max + tol:
+                        impulse_positions.append(base_loc)
+                        impulse_positions_areas.append(base_area)
+            else:
+                T = self.periodo
+                for base_loc, base_area in zip(self.impulse_locs, self.impulse_areas):
+                    k_min = int(np.floor((t_min - base_loc) / T))
+                    k_max = int(np.ceil((t_max - base_loc) / T))
+                    for k in range(k_min, k_max + 1):
+                        t_k = base_loc + k * T
+                        if t_min - tol <= t_k <= t_max + tol:
+                            impulse_positions.append(t_k)
+                            impulse_positions_areas.append(base_area)
+        # Eliminar duplicados en posiciones de impulsos
+        unique_impulse_positions = []
+        unique_impulse_areas = []
+        for loc, area in zip(impulse_positions, impulse_positions_areas):
+            if not any(abs(loc - loc0) <= tol for loc0 in unique_impulse_positions):
+                unique_impulse_positions.append(loc)
+                unique_impulse_areas.append(area)
+        if unique_impulse_positions:
+            idx_sort = np.argsort(unique_impulse_positions)
+            impulse_positions = [unique_impulse_positions[i] for i in idx_sort]
+            impulse_positions_areas = [unique_impulse_areas[i] for i in idx_sort]
+        else:
+            impulse_positions = []
+            impulse_positions_areas = []
+
+        # 4. Procesar eje X: determinar raw_xticks según effective_xticks
+        raw_xticks = []
+        manual_xticks = []
+        manual_xlabels = []
+        # Detectar si en init hubo ticks válidos (lista no vacía)
+        has_init_xticks = False
+        init_xt = getattr(self, 'xticks', None)
+        if init_xt is not None:
+            try:
+                arr = np.array(init_xt)
+                if arr.ndim >= 1 and arr.size >= 1:
+                    has_init_xticks = True
+            except Exception:
+                has_init_xticks = False
+
+        if effective_xticks is None:
+            # No mostrar ningún tick en X
             raw_xticks = []
-        elif xticks == 'auto':
-            raw_xticks = list(self.xticks) if self.xticks is not None else list(np.linspace(*self.horiz_range, 5))
+        elif isinstance(effective_xticks, str) and effective_xticks == 'auto':
+            if has_init_xticks:
+                # Usar ticks pasados en init como base manual
+                raw_xticks = list(self.xticks)
+                if self.xtick_labels is not None:
+                    if len(self.xticks) != len(self.xtick_labels):
+                        raise ValueError("xtick_labels y xticks de init deben tener la misma longitud")
+                    manual_xticks = list(self.xticks)
+                    manual_xlabels = list(self.xtick_labels)
+                # Combinar con posiciones periódicas de impulsos
+                for loc in impulse_positions:
+                    if t_min - tol <= loc <= t_max + tol and not any(abs(loc - x0) <= tol for x0 in raw_xticks):
+                        raw_xticks.append(loc)
+            else:
+                # Sin init ticks: si hay impulsos, mostrar solo sus posiciones periódicas; si no, generar equiespaciados
+                if impulse_positions:
+                    raw_xticks = list(impulse_positions)
+                else:
+                    raw_xticks = list(np.linspace(t_min, t_max, 5))
         else:
-            raw_xticks = list(xticks)
-
-        if yticks is None:
-            raw_yticks = []
-        elif yticks == 'auto':
-            raw_yticks = list(self.yticks) if self.yticks is not None else list(np.linspace(np.floor(self.y_min), np.ceil(self.y_max), 3))
-        else:
-            raw_yticks = list(yticks)
-
-        # ---- VALIDACIÓN ETIQUETAS ----
-        if xtick_labels not in (None, 'auto'):
-            if not raw_xticks:
-                raise ValueError("Se han proporcionado xtick_labels pero no hay xticks")
-            if len(xtick_labels) != len(raw_xticks):
-                raise ValueError("xtick_labels y xticks deben tener la misma longitud")
-        if ytick_labels not in (None, 'auto'):
-            if not raw_yticks:
-                raise ValueError("Se han proporcionado ytick_labels pero no hay yticks")
-            if len(ytick_labels) != len(raw_yticks):
-                raise ValueError("ytick_labels y yticks deben tener la misma longitud")
-
-        # ---- FILTRADO SOLO AUTO PARA Y ----
-        xticks_final = raw_xticks
-        if yticks is None or (yticks == 'auto' and self.yticks is None):
-            yticks_final = [y for y in raw_yticks if abs(y) > 1e-6]
-        else:
-            yticks_final = raw_yticks
-
-        # ---- ETIQUETAS ----
-        if xticks_final:
+            # effective_xticks es lista o array explícita
+            raw_xticks = list(effective_xticks)
+            # Si se pasaron etiquetas en la llamada
             if xtick_labels not in (None, 'auto'):
-                xlabels = xtick_labels
-            elif self.xtick_labels is not None:
-                xlabels = self.xtick_labels
-            else:
-                xlabels = [f'{x:g}' for x in xticks_final]
-        else:
-            xlabels = []
-        if yticks_final:
-            if ytick_labels not in (None, 'auto'):
-                ylabels = ytick_labels
-            elif self.ytick_labels is not None:
-                ylabels = self.ytick_labels
-            else:
-                ylabels = [f'{y:g}' for y in yticks_final]
-        else:
-            ylabels = []
+                if len(raw_xticks) != len(xtick_labels):
+                    raise ValueError("xtick_labels y xticks deben tener la misma longitud")
+                manual_xticks = list(raw_xticks)
+                manual_xlabels = list(xtick_labels)
+            # Combinar con posiciones periódicas de impulsos
+            for loc in impulse_positions:
+                if t_min - tol <= loc <= t_max + tol and not any(abs(loc - x0) <= tol for x0 in raw_xticks):
+                    raw_xticks.append(loc)
+        # Eliminar duplicados y ordenar
+        unique_xticks = []
+        for x in raw_xticks:
+            if not any(abs(x - x0) <= tol for x0 in unique_xticks):
+                unique_xticks.append(x)
+        raw_xticks = sorted(unique_xticks)
 
-        # ---- CONVERSIÓN px -> data ----
-        # origen en data
+        # 5. Generar etiquetas X: usar manuales cuando coincida, o f'{x:g}'
+        xlabels = []
+        for x in raw_xticks:
+            label = None
+            for xm, lbl in zip(manual_xticks, manual_xlabels):
+                if abs(xm - x) <= tol:
+                    label = lbl
+                    break
+            if label is None:
+                label = f'{x:g}'
+            xlabels.append(label)
+
+        # 6. Procesar eje Y: determinar raw_yticks según effective_yticks
+        raw_yticks = []
+        manual_yticks = []
+        manual_ylabels = []
+        # Detectar si en init hubo yticks válidos
+        has_init_yticks = False
+        init_yt = getattr(self, 'yticks', None)
+        if init_yt is not None:
+            try:
+                arr_y = np.array(init_yt)
+                if arr_y.ndim >= 1 and arr_y.size >= 1:
+                    has_init_yticks = True
+            except Exception:
+                has_init_yticks = False
+
+        if effective_yticks is None:
+            raw_yticks = []
+        elif isinstance(effective_yticks, str) and effective_yticks == 'auto':
+            if has_init_yticks:
+                raw_yticks = list(self.yticks)
+                if self.ytick_labels is not None:
+                    if len(self.yticks) != len(self.ytick_labels):
+                        raise ValueError("ytick_labels y yticks de init deben tener la misma longitud")
+                    manual_yticks = list(self.yticks)
+                    manual_ylabels = list(self.ytick_labels)
+            else:
+                # Generar 3 equiespaciados entre floor(y_min) y ceil(y_max)
+                y0 = np.floor(self.y_min)
+                y1 = np.ceil(self.y_max)
+                if abs(y1 - y0) < 1e-6:
+                    raw_yticks = [y0 - 1, y0, y0 + 1]
+                else:
+                    raw_yticks = list(np.linspace(y0, y1, 3))
+        else:
+            # Lista explícita para Y
+            raw_yticks = list(effective_yticks)
+            if ytick_labels not in (None, 'auto'):
+                if len(raw_yticks) != len(ytick_labels):
+                    raise ValueError("ytick_labels y yticks deben tener la misma longitud")
+                manual_yticks = list(raw_yticks)
+                manual_ylabels = list(ytick_labels)
+        # Eliminar duplicados y ordenar
+        unique_yticks = []
+        for y in raw_yticks:
+            if not any(abs(y - y0) <= tol for y0 in unique_yticks):
+                unique_yticks.append(y)
+        raw_yticks = sorted(unique_yticks)
+
+        # 7. Generar etiquetas Y: usar manuales cuando coincida, o f'{y:g}'
+        ylabels = []
+        for y in raw_yticks:
+            label = None
+            for ym, lbl in zip(manual_yticks, manual_ylabels):
+                if abs(ym - y) <= tol:
+                    label = lbl
+                    break
+            if label is None:
+                label = f'{y:g}'
+            ylabels.append(label)
+
+        # 8. Filtrar ytick=0 si existe xtick=0
+        has_xtick_zero = any(abs(x) <= tol for x in raw_xticks)
+        if has_xtick_zero:
+            filtered_yticks = []
+            filtered_ylabels = []
+            for y, lbl in zip(raw_yticks, ylabels):
+                if abs(y) <= tol:
+                    continue
+                filtered_yticks.append(y)
+                filtered_ylabels.append(lbl)
+            raw_yticks = filtered_yticks
+            ylabels = filtered_ylabels
+
+        # 9. Conversión px -> data para longitud de ticks
         origin_disp = self.ax.transData.transform((0, 0))
-        # desplazamiento en px hacia arriba
         up_disp = origin_disp + np.array([0, tick_px])
         right_disp = origin_disp + np.array([tick_px, 0])
-        # transformar de vuelta a data
         origin_data = np.array(self.ax.transData.inverted().transform(origin_disp))
         up_data = np.array(self.ax.transData.inverted().transform(up_disp))
         right_data = np.array(self.ax.transData.inverted().transform(right_disp))
         dy = up_data[1] - origin_data[1]
         dx = right_data[0] - origin_data[0]
 
-        # dibujar ticks X (centrados en y=0)
-        for x, lbl in zip(xticks_final, xlabels):
-            self.ax.plot([x, x], [0 - dy/2, 0 + dy/2], transform=self.ax.transData,
-                         color='black', linewidth=1.2, clip_on=False)
-            if abs(x) < 1e-10:  # etiqueta sobre el eje vertical
-                offset = (-8, -8)  # desplazar más hacia abajo
-            else:
-                offset = (0, -8)
-            self.ax.annotate(rf'${lbl}$', xy=(x, 0), xycoords='data', textcoords='offset points',
-                             xytext=offset, ha='center', va='top', fontsize=12, zorder=10)
+        # 10. Dibujar ticks X
+        xlim = self.ax.get_xlim()
+        for x, lbl in zip(raw_xticks, xlabels):
+            if xlim[0] <= x <= xlim[1]:
+                self.ax.plot([x, x], [0 - dy/2, 0 + dy/2], transform=self.ax.transData,
+                            color='black', linewidth=1.2, clip_on=False)
+                # Offset vertical según área de impulso
+                area = None
+                for loc, a in zip(impulse_positions, impulse_positions_areas):
+                    if abs(loc - x) <= tol:
+                        area = a
+                        break
+                if area is not None and area < 0:
+                    y_off = +8
+                else:
+                    y_off = -8
+                # Offset horizontal si x≈0
+                if abs(x) < tol:
+                    offset = (-8, y_off)
+                else:
+                    offset = (0, y_off)
+                va = 'bottom' if y_off > 0 else 'top'
+                self.ax.annotate(rf'${lbl}$', xy=(x, 0), xycoords='data',
+                                textcoords='offset points', xytext=offset,
+                                ha='center', va=va, fontsize=12, zorder=10,
+                                bbox=dict(boxstyle='round,pad=0.1', facecolor='white', edgecolor='none', alpha=self.alpha))
 
-        # dibujar ticks Y (centrados en x=0)
-        for y, lbl in zip(yticks_final, ylabels):
-            self.ax.plot([0 - dx/2, 0 + dx/2], [y, y], transform=self.ax.transData,
-                         color='black', linewidth=1.2, clip_on=False)
-            if abs(y) < 1e-10:  # etiqueta sobre el eje horizontal
-                offset = (-8, -8)  # desplazar más a la derecha
-            else:
-                offset = (-8, 0)
-            self.ax.annotate(rf'${lbl}$', xy=(0, y), xycoords='data', textcoords='offset points',
-                             xytext=offset, ha='right', va='center', fontsize=12)
+        # 11. Dibujar ticks Y
+        ylim = self.ax.get_ylim()
+        for y, lbl in zip(raw_yticks, ylabels):
+            if ylim[0] <= y <= ylim[1]:
+                self.ax.plot([0 - dx/2, 0 + dx/2], [y, y], transform=self.ax.transData,
+                            color='black', linewidth=1.2, clip_on=False)
+                if abs(y) < 1e-10:
+                    offset = (-8, -8)
+                else:
+                    offset = (-8, 0)
+                self.ax.annotate(rf'${lbl}$', xy=(0, y), xycoords='data',
+                                textcoords='offset points', xytext=offset,
+                                ha='right', va='center', fontsize=12, zorder=10,
+                                bbox=dict(boxstyle='round,pad=0.1', facecolor='white', edgecolor='none', alpha=self.alpha))
+
 
     def draw_labels(self):
         x_lim = self.ax.get_xlim()
