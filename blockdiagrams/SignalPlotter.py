@@ -316,7 +316,7 @@ class SignalPlotter:
         tol = 1e-6 * max(1.0, abs(x_range))
         if abs(t0) < tol:
             # Desplazar la etiqueta un 2% del rango horizontal hacia la izquierda
-            x_offset = -0.02 * x_range
+            x_offset = -0.01 * x_range
             ha = 'right'
         else:
             x_offset = 0.0
@@ -486,12 +486,19 @@ class SignalPlotter:
         else:
             # effective_xticks es lista o array explícita
             raw_xticks = list(effective_xticks)
-            # Si se pasaron etiquetas en la llamada
+
+            # Si no se pasaron etiquetas en la llamada pero se dieron en init, usarlas
             if xtick_labels not in (None, 'auto'):
                 if len(raw_xticks) != len(xtick_labels):
                     raise ValueError("xtick_labels y xticks deben tener la misma longitud")
                 manual_xticks = list(raw_xticks)
                 manual_xlabels = list(xtick_labels)
+            elif self.xtick_labels is not None:
+                if len(raw_xticks) != len(self.xtick_labels):
+                    raise ValueError("xtick_labels y xticks deben tener la misma longitud (init)")
+                manual_xticks = list(raw_xticks)
+                manual_xlabels = list(self.xtick_labels)
+
             # Combinar con posiciones periódicas de impulsos
             for loc in impulse_positions:
                 if t_min - tol <= loc <= t_max + tol and not any(abs(loc - x0) <= tol for x0 in raw_xticks):
@@ -551,11 +558,19 @@ class SignalPlotter:
         else:
             # Lista explícita para Y
             raw_yticks = list(effective_yticks)
+
+            # Si se pasaron etiquetas en la llamada
             if ytick_labels not in (None, 'auto'):
                 if len(raw_yticks) != len(ytick_labels):
                     raise ValueError("ytick_labels y yticks deben tener la misma longitud")
                 manual_yticks = list(raw_yticks)
                 manual_ylabels = list(ytick_labels)
+            # O si se pasaron al inicializar
+            elif self.ytick_labels is not None:
+                if len(raw_yticks) != len(self.ytick_labels):
+                    raise ValueError("ytick_labels y yticks deben tener la misma longitud (init)")
+                manual_yticks = list(raw_yticks)
+                manual_ylabels = list(self.ytick_labels)
         # Eliminar duplicados y ordenar
         unique_yticks = []
         for y in raw_yticks:
