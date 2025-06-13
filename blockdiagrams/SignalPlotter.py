@@ -7,56 +7,53 @@ import re
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.transforms import blended_transform_factory
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
-import matplotlib.animation as animation
-from IPython.display import HTML
+from fractions import Fraction
+import warnings
 
 class SignalPlotter:
-    def __init__(self, expr_str, horiz_range=(-5, 5), vert_range=None, num_points=1000,
-                 figsize=(8, 3), tick_size_px=5,
-                 xticks='auto', yticks='auto', xtick_labels=None, ytick_labels=None,
-                 save_path=None, show_plot=True, color='black', alpha=0.5, periodo=None):
-        # parse expression of form "f(v)=..." or default
-        m = re.match(r"^(?P<fn>[^\W\d_]+)\((?P<vr>[^)]+)\)\s*=\s*(?P<ex>.+)$", expr_str)
-        if m:
-            self.func_name = m.group('fn')
-            var_name = m.group('vr')
-            expr_body = m.group('ex')
-        else:
-            self.func_name = 'x'
-            var_name = 't'
-            expr_body = expr_str
-
-        # Transparence for labels
-        self.alpha = alpha
-
-        # Replace LaTeX-like variable names
-        replacements = {'\\omega': 'ω', '\\tau': 'τ'}
-        for latex_var, unicode_var in replacements.items():
-            var_name = var_name.replace(latex_var, unicode_var)
-            expr_body = expr_body.replace(latex_var, unicode_var)
-
-        self.expr_str = expr_body
-        self.var = sp.Symbol(var_name)
-
-        # store label names
-        self.xlabel = var_name
-        self.ylabel = self.func_name + '(' + var_name + ')'
-
+    def __init__(
+        self,
+        expr_str=None, 
+        horiz_range=(-5, 5),
+        vert_range=None,
+        periodo=None,
+        num_points=1000,
+        figsize=(8, 3), 
+        tick_size_px=5,
+        xticks='auto',
+        yticks='auto',
+        xtick_labels=None,
+        ytick_labels=None,
+        pi_mode=False,
+        fraction_ticks=False,
+        save_path=None, 
+        show_plot=True,
+        color='black', 
+        alpha=0.5, 
+        xticks_delta=None,
+        yticks_delta=None
+    ):
+        self.signal_defs = {}
+        self.var_symbols = {}
+        self.current_name = None
         self.horiz_range = horiz_range
         self.vert_range = vert_range
         self.num_points = num_points
         self.figsize = figsize
         self.tick_size_px = tick_size_px
         self.color = color
+        self.alpha = alpha
         self.periodo = periodo
+        self.save_path = save_path
+        self.show_plot = show_plot
+
+        self.fraction_ticks = fraction_ticks
 
         # Guardar argumento original para diferenciar None / [] / 'auto'
         self.init_xticks_arg = xticks
         self.init_yticks_arg = yticks
 
-        # Luego convertir solo si es lista/tupla/array no vacío
         if isinstance(xticks, (list, tuple, np.ndarray)) and len(xticks) > 0:
             self.xticks = np.array(xticks)
         else:
@@ -65,10 +62,12 @@ class SignalPlotter:
             self.yticks = np.array(yticks)
         else:
             self.yticks = None
+        
+        self.pi_mode = pi_mode
+
         self.xtick_labels = xtick_labels
         self.ytick_labels = ytick_labels
 
-        # validate labels
         if self.xtick_labels is not None:
             if self.xticks is None:
                 raise ValueError("xtick_labels provided without xticks positions")
@@ -80,35 +79,15 @@ class SignalPlotter:
             if len(self.ytick_labels) != len(self.yticks):
                 raise ValueError("ytick_labels and yticks must have the same length")
 
-        self.save_path = save_path
-        self.show_plot = show_plot
+        self.xticks_delta = xticks_delta
+        self.yticks_delta = yticks_delta
 
-        # Local dictionary (for parsing functions)
-        self.local_dict = self._get_local_dict()
+        if expr_str:
+            self._initialize_expression(expr_str)
 
-        # Parse expression
-        transformations = standard_transformations + (implicit_multiplication_application,)
-        self.expr = parse_expr(expr_body, local_dict=self.local_dict, transformations=transformations)
-
-        # Extract components
-        self.expr_cont = self._remove_dirac_terms()
-        self.impulse_locs, self.impulse_areas = self._extract_impulses()
-
-        # Prepare t_vals with periodicity
-        t0, t1 = self.horiz_range
-        self.t_vals = np.linspace(t0, t1, self.num_points)
-        if self.periodo is not None:
-            T = self.periodo
-            self.t_vals = ((self.t_vals + T/2) % T) - T/2
-            self.t_vals.sort()
-
-        # create numeric function
-        self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self.local_dict])
-        self.fig, self.ax = plt.subplots(figsize=self.figsize)
-        self._prepare_plot()
 
     def _get_local_dict(self):
-        return {
+        d = {
             'u':            sp.Heaviside,
             'rect':         lambda t: sp.Heaviside(t + 0.5) - sp.Heaviside(t - 0.5),
             'tri':          lambda t: (1 - abs(t)) * sp.Heaviside(1 - abs(t)),
@@ -117,13 +96,110 @@ class SignalPlotter:
             'DiracDelta':   sp.DiracDelta,
             'Heaviside':    sp.Heaviside,
             'pi':           sp.pi,
-            self.var.name:  self.var,
             'sin':          sp.sin,
             'cos':          sp.cos,
             'exp':          sp.exp,
             'Piecewise':    sp.Piecewise,
-            'pw':           sp.Piecewise
+            'pw':           sp.Piecewise,
+            're':           sp.re,            # Parte real
+            'im':           sp.im,            # Parte imaginaria
+            'conj':         sp.conjugate,    # Conjugado complejo
+            'abs':          lambda x: np.abs(x),           # Magnitud / módulo
+            'arg':          sp.arg,           # Argumento / fase
+            'i':            sp.I,
+            'j':            sp.I
         }
+        d.update(self.var_symbols)
+        for name, expr in self.signal_defs.items():
+            for var in self.var_symbols.values():
+                d[f"{name}({var})"] = expr.subs(var, var)
+        return d
+
+    def _initialize_expression(self, expr_str):
+        m = re.match(r"^(?P<fn>[^\W\d_]+)\((?P<vr>[^)]+)\)\s*=\s*(?P<ex>.+)$", expr_str)
+        if m:
+            self.func_name = m.group('fn')
+            var_name = m.group('vr')
+            expr_body = m.group('ex')
+        else:
+            self.func_name = 'x'
+            var_name = 't'
+            expr_body = expr_str
+
+        replacements = {'\\omega': 'ω', '\\tau': 'τ'}
+        for latex_var, unicode_var in replacements.items():
+            var_name = var_name.replace(latex_var, unicode_var)
+            expr_body = expr_body.replace(latex_var, unicode_var)
+
+        self.expr_str = expr_body
+        self.var = sp.Symbol(var_name)
+        self.xlabel = var_name
+        self.ylabel = self.func_name + '(' + var_name + ')'
+
+        self.local_dict = self._get_local_dict()
+
+        transformations = standard_transformations + (implicit_multiplication_application,)
+        self.expr = parse_expr(expr_body, local_dict=self.local_dict, transformations=transformations)
+
+        self.expr_cont = self._remove_dirac_terms()
+        self.impulse_locs, self.impulse_areas = self._extract_impulses()
+
+        t0, t1 = self.horiz_range
+        self.t_vals = np.linspace(t0, t1, self.num_points)
+        if self.periodo is not None:
+            T = self.periodo
+            self.t_vals = ((self.t_vals + T/2) % T) - T/2
+            self.t_vals.sort()
+
+        self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self.local_dict])
+        self.fig, self.ax = plt.subplots(figsize=self.figsize)
+        self._prepare_plot()
+
+    def add_signal(self, expr_str, label=None, period=None):
+        m = re.match(r"^(?P<fn>\w+)\((?P<vr>\w+)\)\s*=\s*(?P<ex>.+)$", expr_str)
+
+        replacements = {'\\omega': 'ω', '\\tau': 'τ'}
+        for latex_var, unicode_var in replacements.items():
+            expr_str = expr_str.replace(latex_var, unicode_var)
+        m = re.match(r"^(?P<fn>\w+)\((?P<vr>\w+)\)\s*=\s*(?P<ex>.+)$", expr_str)
+
+        name = m.group('fn')
+        var = m.group('vr')
+        body = m.group('ex')
+
+        if var not in self.var_symbols:
+            self.var_symbols[var] = sp.Symbol(var)
+        var_sym = self.var_symbols[var]
+
+        local_dict = self._get_local_dict()
+        for other_name in self.signal_defs:
+            local_dict[other_name] = sp.Function(other_name)
+
+        transformations = standard_transformations + (implicit_multiplication_application,)
+        parsed_expr = parse_expr(body, local_dict=local_dict, transformations=transformations)
+
+        for other_name, other_expr in self.signal_defs.items():
+            f = sp.Function(other_name)
+            matches = parsed_expr.find(f)
+            for call in matches:
+                if isinstance(call, sp.Function):
+                    arg = call.args[0]
+                    replaced = other_expr.subs(var_sym, arg)
+                    parsed_expr = parsed_expr.subs(call, replaced)
+
+        self.signal_defs[name] = parsed_expr
+        self.var_symbols[name] = var_sym
+
+        if label is not None:
+            if not hasattr(self, 'custom_labels'):
+                self.custom_labels = {}
+            self.custom_labels[name] = label
+
+        # ✅ Guardar periodo individual con nombre 'period'
+        if period is not None:
+            if not hasattr(self, 'signal_periods'):
+                self.signal_periods = {}
+            self.signal_periods[name] = period
 
 
     def _prepare_plot(self):
@@ -176,7 +252,9 @@ class SignalPlotter:
     def _extract_impulses(self):
         impulse_locs = []
         impulse_areas = []
-        expr_terms = self.expr.as_ordered_terms()
+        
+        # 🔧 Fuerza expansión para detectar DiracDelta correctamente
+        expr_terms = self.expr.expand().as_ordered_terms()
 
         for term in expr_terms:
             deltas = term.atoms(sp.DiracDelta)
@@ -185,22 +263,26 @@ class SignalPlotter:
                 roots = sp.solve(arg, self.var)
                 amp = term.coeff(delta)
 
-                # derivar factor de escalado de la delta
                 d_arg = sp.diff(arg, self.var)
                 scale = sp.Abs(d_arg)
 
                 for r in roots:
-                    # Evaluar el valor de escala en el punto r
                     try:
                         scale_val = float(scale.subs(self.var, r))
                     except Exception:
-                        scale_val = 1.0  # fallback si no evaluable
+                        scale_val = 1.0
 
-                    effective_amp = float(amp) / scale_val if scale_val != 0 else 0.0
+                    try:
+                        amp_at_r = amp.subs(self.var, r).evalf()
+                        effective_amp = float(amp_at_r) / scale_val if scale_val != 0 else 0.0
+                    except Exception:
+                        effective_amp = 0.0
+
                     impulse_locs.append(float(r))
                     impulse_areas.append(effective_amp)
 
         return impulse_locs, impulse_areas
+
 
     def _remove_dirac_terms(self):
         return self.expr.replace(lambda expr: expr.has(sp.DiracDelta), lambda _: 0)
@@ -375,7 +457,6 @@ class SignalPlotter:
         
         self.fig.tight_layout()
 
-
     def draw_ticks(self,
                 tick_size_px=None,
                 xticks=None,
@@ -383,277 +464,367 @@ class SignalPlotter:
                 xtick_labels='auto',
                 ytick_labels='auto'):
         """
-        Dibuja las marcas de los ejes centradas en las líneas de los ejes.
-        Parámetros:
-        - tick_size_px: tamaño del tick en píxeles (por defecto self.tick_size_px).
-        - xticks, yticks: None, 'auto', lista de posiciones.
-            * Si xticks es None en esta llamada, usa lo que se pasó en init (self.init_xticks_arg).
-            * Si xticks es 'auto', comportamiento automático:
-                - En X: si en init hubo lista no vacía, úsala como base y combina con impulsos periódicos;
-                si no hubo pero existen impulsos, muestra solo posiciones periódicas;
-                si no hay ni init ni impulsos, genera 5 equiespaciados.
-                - En Y: si en init hubo lista no vacía, úsala; si no, genera 3 equiespaciados entre floor(y_min) y ceil(y_max).
-            * Si xticks es lista en esta llamada, la usa como manual y en X la combina con impulsos; en Y, solo usa la lista.
-        - xtick_labels, ytick_labels: 'auto' (etiquetas por defecto) o lista de mismas longitudes que xticks/yticks manuales.
-        Comportamiento extra:
-        - Los impulsos periódicos afectan solo al eje X: se repiten según self.periodo.
-        - El offset vertical de la etiqueta de un xtick: si coincide con impulso de área<0 → etiqueta encima del eje; área>=0 o no impulso → debajo.
-        - Si se dibuja un xtick en 0, no mostrar el ytick en 0 (filtrado posterior).
-        - Se eliminan duplicados con tolerancia relativa y se ordenan.
+        Draws tick marks and labels on the x and y axes, according to the current configuration.
+
+        Supported behaviors:
+
+        X AXIS (xticks):
+
+        - `xticks=None`:
+            Only the positions of delta impulses (if any) are shown.
+
+        - `xticks='auto'`:
+            Ticks are generated automatically:
+                - If `xticks` were set during initialization, they are used.
+                - Otherwise, ticks are placed evenly across the horizontal range.
+                If `xticks_delta` is provided, ticks are placed every that interval from the origin (both positive and negative).
+                Additional ticks at delta locations are added if not already present (according to tolerance `tol`).
+
+        - `xticks=[... list of positions ...]`:
+            These positions are used as manual ticks. If `xtick_labels` is provided, those are used as labels;
+            otherwise, labels are generated automatically.
+
+        X-axis tick labels:
+        - If `pi_mode=True`, ticks are shown as multiples of π (e.g., `-\\pi/2`, `3\\pi/4`, `0`, etc.).
+        - If `fraction_ticks=True` and `pi_mode=False`, ticks are formatted as rational fractions (e.g., `1/2`, `-3/4`).
+        - If both are active, labels appear as rational multiples of π (e.g., `-\\pi/2`, `3\\pi/4`).
+        - If neither is active, simple decimal labels are used (`1.5`, `-2`, etc.).
+        - Manual labels (via `xtick_labels`) always take precedence.
+
+        Warning:
+        - If `xticks_delta` is provided and `xticks` is not `'auto'`, a `UserWarning` is issued to indicate it will be ignored.
+
+        Y AXIS (yticks):
+
+        - `yticks=None`:
+            No ticks are shown on the y-axis.
+
+        - `yticks='auto'`:
+            Ticks are generated automatically:
+                - If `yticks` were set during initialization, they are used.
+                - Otherwise, 3 evenly spaced ticks are placed within the vertical bounds.
+                If `yticks_delta` is provided, ticks are placed every that interval from the origin (positive and negative).
+
+        - `yticks=[... list of positions ...]`:
+            These positions are used as manual ticks. If `ytick_labels` is provided, those are used as labels;
+            otherwise, labels are generated automatically.
+
+        Y-axis tick labels:
+        - If `fraction_ticks=True`, ticks are shown as rational fractions (`1/2`, `-3/4`, etc.).
+        - If not, simple decimal labels are used (`0.2`, `1`, etc.).
+        - Manual labels (via `ytick_labels`) always take precedence.
+
+        Warning:
+        - If `yticks_delta` is provided and `yticks` is not `'auto'`, a `UserWarning` is issued to indicate it will be ignored.
+
+        Notes:
+        - All automatically generated labels avoid near-duplicates using the `tol` parameter.
+        - Returned ticks are sorted and cleaned of redundant values.
         """
-        # 0. Determinar “effective_xticks”: si xticks param es None, usar init_xticks_arg; si no, usar xticks
-        effective_xticks = xticks if xticks is not None else getattr(self, 'init_xticks_arg', None)
-        effective_yticks = yticks if yticks is not None else getattr(self, 'init_yticks_arg', None)
 
-        # 1. Configuración inicial de tamaño del tick en px
-        tick_px = tick_size_px if tick_size_px is not None else self.tick_size_px
+        def unique_sorted(values, tol):
+            unique = []
+            for v in values:
+                if not any(abs(v - u) <= tol for u in unique):
+                    unique.append(v)
+            return sorted(unique)
 
-        # 2. Rango horizontal y tolerancia relativa para floats
-        t_min, t_max = self.horiz_range
-        tol = 1e-8 * max(1.0, abs(t_max - t_min))
-
-        # 3. Calcular posiciones periódicas de impulsos en X dentro de [t_min, t_max]
-        impulse_positions = []
-        impulse_positions_areas = []
-        if self.impulse_locs:
-            if self.periodo is None:
-                for base_loc, base_area in zip(self.impulse_locs, self.impulse_areas):
-                    if t_min - tol <= base_loc <= t_max + tol:
-                        impulse_positions.append(base_loc)
-                        impulse_positions_areas.append(base_area)
-            else:
-                T = self.periodo
-                for base_loc, base_area in zip(self.impulse_locs, self.impulse_areas):
-                    k_min = int(np.floor((t_min - base_loc) / T))
-                    k_max = int(np.ceil((t_max - base_loc) / T))
-                    for k in range(k_min, k_max + 1):
-                        t_k = base_loc + k * T
-                        if t_min - tol <= t_k <= t_max + tol:
-                            impulse_positions.append(t_k)
-                            impulse_positions_areas.append(base_area)
-        # Eliminar duplicados en posiciones de impulsos
-        unique_impulse_positions = []
-        unique_impulse_areas = []
-        for loc, area in zip(impulse_positions, impulse_positions_areas):
-            if not any(abs(loc - loc0) <= tol for loc0 in unique_impulse_positions):
-                unique_impulse_positions.append(loc)
-                unique_impulse_areas.append(area)
-        if unique_impulse_positions:
-            idx_sort = np.argsort(unique_impulse_positions)
-            impulse_positions = [unique_impulse_positions[i] for i in idx_sort]
-            impulse_positions_areas = [unique_impulse_areas[i] for i in idx_sort]
-        else:
+        def get_impulse_positions_and_areas(t_min, t_max, tol):
             impulse_positions = []
             impulse_positions_areas = []
+            if self.impulse_locs:
+                if self.periodo is None:
+                    for base_loc, base_area in zip(self.impulse_locs, self.impulse_areas):
+                        if t_min - tol <= base_loc <= t_max + tol:
+                            impulse_positions.append(base_loc)
+                            impulse_positions_areas.append(base_area)
+                else:
+                    T = self.periodo
+                    for base_loc, base_area in zip(self.impulse_locs, self.impulse_areas):
+                        k_min = int(np.floor((t_min - base_loc) / T))
+                        k_max = int(np.ceil((t_max - base_loc) / T))
+                        for k in range(k_min, k_max + 1):
+                            t_k = base_loc + k * T
+                            if t_min - tol <= t_k <= t_max + tol:
+                                impulse_positions.append(t_k)
+                                impulse_positions_areas.append(base_area)
+            # eliminar duplicados
+            unique_pos = []
+            unique_area = []
+            for loc, area in zip(impulse_positions, impulse_positions_areas):
+                if not any(abs(loc - u) <= tol for u in unique_pos):
+                    unique_pos.append(loc)
+                    unique_area.append(area)
+            if unique_pos:
+                idx_sort = np.argsort(unique_pos)
+                impulse_positions = [unique_pos[i] for i in idx_sort]
+                impulse_positions_areas = [unique_area[i] for i in idx_sort]
+            else:
+                impulse_positions, impulse_positions_areas = [], []
+            return impulse_positions, impulse_positions_areas
 
-        # 4. Procesar eje X: determinar raw_xticks según effective_xticks
-        raw_xticks = []
-        manual_xticks = []
-        manual_xlabels = []
-        # Detectar si en init hubo ticks válidos (lista no vacía)
-        has_init_xticks = False
-        init_xt = getattr(self, 'xticks', None)
-        if init_xt is not None:
+        def has_valid_ticks(ticks):
+            if ticks is None:
+                return False
             try:
-                arr = np.array(init_xt)
-                if arr.ndim >= 1 and arr.size >= 1:
-                    has_init_xticks = True
+                arr = np.array(ticks)
+                return arr.ndim >= 1 and arr.size >= 1
             except Exception:
-                has_init_xticks = False
+                return False
 
-        if effective_xticks is None:
-            # No mostrar ningún tick en X
+        def generate_xticks(effective_xticks, impulse_positions, tol, t_min, t_max):
             raw_xticks = []
-        elif isinstance(effective_xticks, str) and effective_xticks == 'auto':
-            if has_init_xticks:
-                # Usar ticks pasados en init como base manual
-                raw_xticks = list(self.xticks)
-                if self.xtick_labels is not None:
-                    if len(self.xticks) != len(self.xtick_labels):
-                        raise ValueError("xtick_labels y xticks de init deben tener la misma longitud")
-                    manual_xticks = list(self.xticks)
-                    manual_xlabels = list(self.xtick_labels)
-                # Combinar con posiciones periódicas de impulsos
+            manual_xticks = []
+            manual_xlabels = []
+
+            has_init_xticks = has_valid_ticks(getattr(self, 'xticks', None))
+            xticks_delta = getattr(self, 'xticks_delta', None)  # Nuevo atributo opcional
+
+            if isinstance(effective_xticks, str) and effective_xticks == 'auto':
+                if has_init_xticks:
+                    raw_xticks = list(self.xticks)
+                    if self.xtick_labels is not None:
+                        if len(self.xticks) != len(self.xtick_labels):
+                            raise ValueError("xtick_labels y xticks de init deben tener la misma longitud")
+                        manual_xticks = list(self.xticks)
+                        manual_xlabels = list(self.xtick_labels)
+                else:
+                    if xticks_delta is not None:
+                        n_left = int(np.floor((0 - t_min) / xticks_delta))
+                        n_right = int(np.floor((t_max - 0) / xticks_delta))
+                        base_ticks = [k * xticks_delta for k in range(-n_left, n_right + 1)]
+                    else:
+                        base_ticks = list(np.linspace(t_min, t_max, 5))
+                    raw_xticks = base_ticks.copy()
+
+                # Añadir impulsos
                 for loc in impulse_positions:
                     if t_min - tol <= loc <= t_max + tol and not any(abs(loc - x0) <= tol for x0 in raw_xticks):
                         raw_xticks.append(loc)
+
             else:
-                # Sin init ticks: si hay impulsos, mostrar solo sus posiciones periódicas; si no, generar equiespaciados
-                if impulse_positions:
-                    raw_xticks = list(impulse_positions)
-                else:
-                    raw_xticks = list(np.linspace(t_min, t_max, 5))
-        else:
-            # effective_xticks es lista o array explícita
-            raw_xticks = list(effective_xticks)
+                if xticks_delta is not None:
+                    warnings.warn("xticks_delta será ignorado porque xticks no está en modo 'auto'.", stacklevel=2)
+                raw_xticks = list(effective_xticks)
+                if xtick_labels not in (None, 'auto'):
+                    if len(raw_xticks) != len(xtick_labels):
+                        raise ValueError("xtick_labels y xticks deben tener la misma longitud")
+                    manual_xticks = list(raw_xticks)
+                    manual_xlabels = list(xtick_labels)
+                elif self.xtick_labels is not None:
+                    if len(raw_xticks) != len(self.xtick_labels):
+                        raise ValueError("xtick_labels y xticks deben tener la misma longitud (init)")
+                    manual_xticks = list(raw_xticks)
+                    manual_xlabels = list(self.xtick_labels)
 
-            # Si no se pasaron etiquetas en la llamada pero se dieron en init, usarlas
-            if xtick_labels not in (None, 'auto'):
-                if len(raw_xticks) != len(xtick_labels):
-                    raise ValueError("xtick_labels y xticks deben tener la misma longitud")
-                manual_xticks = list(raw_xticks)
-                manual_xlabels = list(xtick_labels)
-            elif self.xtick_labels is not None:
-                if len(raw_xticks) != len(self.xtick_labels):
-                    raise ValueError("xtick_labels y xticks deben tener la misma longitud (init)")
-                manual_xticks = list(raw_xticks)
-                manual_xlabels = list(self.xtick_labels)
+                for loc in impulse_positions:
+                    if t_min - tol <= loc <= t_max + tol and not any(abs(loc - x0) <= tol for x0 in raw_xticks):
+                        raw_xticks.append(loc)
 
-            # Combinar con posiciones periódicas de impulsos
-            for loc in impulse_positions:
-                if t_min - tol <= loc <= t_max + tol and not any(abs(loc - x0) <= tol for x0 in raw_xticks):
-                    raw_xticks.append(loc)
-        # Eliminar duplicados y ordenar
-        unique_xticks = []
-        for x in raw_xticks:
-            if not any(abs(x - x0) <= tol for x0 in unique_xticks):
-                unique_xticks.append(x)
-        raw_xticks = sorted(unique_xticks)
+            raw_xticks = unique_sorted(raw_xticks, tol)
 
-        # 5. Generar etiquetas X: usar manuales cuando coincida, o f'{x:g}'
-        xlabels = []
-        for x in raw_xticks:
-            label = None
-            for xm, lbl in zip(manual_xticks, manual_xlabels):
-                if abs(xm - x) <= tol:
-                    label = lbl
-                    break
-            if label is None:
-                label = f'{x:g}'
-            xlabels.append(label)
-
-        # 6. Procesar eje Y: determinar raw_yticks según effective_yticks
-        raw_yticks = []
-        manual_yticks = []
-        manual_ylabels = []
-        # Detectar si en init hubo yticks válidos
-        has_init_yticks = False
-        init_yt = getattr(self, 'yticks', None)
-        if init_yt is not None:
-            try:
-                arr_y = np.array(init_yt)
-                if arr_y.ndim >= 1 and arr_y.size >= 1:
-                    has_init_yticks = True
-            except Exception:
-                has_init_yticks = False
-
-        if effective_yticks is None:
-            raw_yticks = []
-        elif isinstance(effective_yticks, str) and effective_yticks == 'auto':
-            if has_init_yticks:
-                raw_yticks = list(self.yticks)
-                if self.ytick_labels is not None:
-                    if len(self.yticks) != len(self.ytick_labels):
-                        raise ValueError("ytick_labels y yticks de init deben tener la misma longitud")
-                    manual_yticks = list(self.yticks)
-                    manual_ylabels = list(self.ytick_labels)
-            else:
-                # Generar 3 equiespaciados entre floor(y_min) y ceil(y_max)
-                y0 = np.floor(self.y_min)
-                y1 = np.ceil(self.y_max)
-                if abs(y1 - y0) < 1e-6:
-                    raw_yticks = [y0 - 1, y0, y0 + 1]
-                else:
-                    raw_yticks = list(np.linspace(y0, y1, 3))
-        else:
-            # Lista explícita para Y
-            raw_yticks = list(effective_yticks)
-
-            # Si se pasaron etiquetas en la llamada
-            if ytick_labels not in (None, 'auto'):
-                if len(raw_yticks) != len(ytick_labels):
-                    raise ValueError("ytick_labels y yticks deben tener la misma longitud")
-                manual_yticks = list(raw_yticks)
-                manual_ylabels = list(ytick_labels)
-            # O si se pasaron al inicializar
-            elif self.ytick_labels is not None:
-                if len(raw_yticks) != len(self.ytick_labels):
-                    raise ValueError("ytick_labels y yticks deben tener la misma longitud (init)")
-                manual_yticks = list(raw_yticks)
-                manual_ylabels = list(self.ytick_labels)
-        # Eliminar duplicados y ordenar
-        unique_yticks = []
-        for y in raw_yticks:
-            if not any(abs(y - y0) <= tol for y0 in unique_yticks):
-                unique_yticks.append(y)
-        raw_yticks = sorted(unique_yticks)
-
-        # 7. Generar etiquetas Y: usar manuales cuando coincida, o f'{y:g}'
-        ylabels = []
-        for y in raw_yticks:
-            label = None
-            for ym, lbl in zip(manual_yticks, manual_ylabels):
-                if abs(ym - y) <= tol:
-                    label = lbl
-                    break
-            if label is None:
-                label = f'{y:g}'
-            ylabels.append(label)
-
-        # 8. Filtrar ytick=0 si existe xtick=0
-        has_xtick_zero = any(abs(x) <= tol for x in raw_xticks)
-        if has_xtick_zero:
-            filtered_yticks = []
-            filtered_ylabels = []
-            for y, lbl in zip(raw_yticks, ylabels):
-                if abs(y) <= tol:
-                    continue
-                filtered_yticks.append(y)
-                filtered_ylabels.append(lbl)
-            raw_yticks = filtered_yticks
-            ylabels = filtered_ylabels
-
-        # 9. Conversión px -> data para longitud de ticks
-        origin_disp = self.ax.transData.transform((0, 0))
-        up_disp = origin_disp + np.array([0, tick_px])
-        right_disp = origin_disp + np.array([tick_px, 0])
-        origin_data = np.array(self.ax.transData.inverted().transform(origin_disp))
-        up_data = np.array(self.ax.transData.inverted().transform(up_disp))
-        right_data = np.array(self.ax.transData.inverted().transform(right_disp))
-        dy = up_data[1] - origin_data[1]
-        dx = right_data[0] - origin_data[0]
-
-        # 10. Dibujar ticks X
-        xlim = self.ax.get_xlim()
-        for x, lbl in zip(raw_xticks, xlabels):
-            if xlim[0] <= x <= xlim[1]:
-                self.ax.plot([x, x], [0 - dy/2, 0 + dy/2], transform=self.ax.transData,
-                            color='black', linewidth=1.2, clip_on=False)
-                # Offset vertical según área de impulso
-                area = None
-                for loc, a in zip(impulse_positions, impulse_positions_areas):
-                    if abs(loc - x) <= tol:
-                        area = a
+            # Generar etiquetas
+            xlabels = []
+            for x in raw_xticks:
+                label = None
+                for xm, lbl in zip(manual_xticks, manual_xlabels):
+                    if abs(xm - x) <= tol:
+                        label = lbl
                         break
-                if area is not None and area < 0:
-                    y_off = +8
-                else:
-                    y_off = -8
-                # Offset horizontal si x≈0
-                if abs(x) < tol:
-                    offset = (-8, y_off)
-                else:
-                    offset = (0, y_off)
-                va = 'bottom' if y_off > 0 else 'top'
-                self.ax.annotate(rf'${lbl}$', xy=(x, 0), xycoords='data',
-                                textcoords='offset points', xytext=offset,
-                                ha='center', va=va, fontsize=12, zorder=10,
-                                bbox=dict(boxstyle='round,pad=0.1', facecolor='white', edgecolor='none', alpha=self.alpha))
+                if label is None:
+                    if getattr(self, 'pi_mode', False):
+                        f = Fraction(x / np.pi).limit_denominator(24)
+                        if abs(float(f) * np.pi - x) > tol:
+                            label = f'{x:g}'
+                        elif f == 0:
+                            label = '0'
+                        elif f == 1:
+                            label = r'\pi'
+                        elif f == -1:
+                            label = r'-\pi'
+                        else:
+                            num = f.numerator
+                            denom = f.denominator
+                            prefix = '-' if num * denom < 0 else ''
+                            num, denom = abs(num), abs(denom)
+                            if denom == 1:
+                                label = rf"{prefix}{num}\pi"
+                            elif num == 1:
+                                label = rf"{prefix}\frac{{\pi}}{{{denom}}}"
+                            else:
+                                label = rf"{prefix}\frac{{{num}\pi}}{{{denom}}}"
+                    elif getattr(self, 'fraction_ticks', False):
+                        f = Fraction(x).limit_denominator(24)
+                        label = f"{f.numerator}/{f.denominator}" if f.denominator != 1 else f"{f.numerator}"
+                    else:
+                        label = f'{x:g}'
+                xlabels.append(label)
 
-        # 11. Dibujar ticks Y
-        ylim = self.ax.get_ylim()
-        for y, lbl in zip(raw_yticks, ylabels):
-            if ylim[0] <= y <= ylim[1]:
-                self.ax.plot([0 - dx/2, 0 + dx/2], [y, y], transform=self.ax.transData,
-                            color='black', linewidth=1.2, clip_on=False)
-                if abs(y) < 1e-10:
-                    offset = (-8, -8)
+            return raw_xticks, xlabels
+
+
+        def generate_yticks(effective_yticks, tol):
+            raw_yticks = []
+            manual_yticks = []
+            manual_ylabels = []
+
+            has_init_yticks = has_valid_ticks(getattr(self, 'yticks', None))
+            ytick_labels = getattr(self, 'ytick_labels', None)
+            ydelta = getattr(self, 'yticks_delta', None)
+
+            if effective_yticks is None:
+                raw_yticks = []
+            elif isinstance(effective_yticks, str) and effective_yticks == 'auto':
+                if has_init_yticks:
+                    raw_yticks = list(self.yticks)
+                    if self.ytick_labels is not None:
+                        if len(self.yticks) != len(self.ytick_labels):
+                            raise ValueError("ytick_labels y yticks de init deben tener la misma longitud")
+                        manual_yticks = list(self.yticks)
+                        manual_ylabels = list(self.ytick_labels)
+                    if ydelta is not None:
+                        warnings.warn("yticks_delta ignorado porque ya se especificaron yticks en el init")
                 else:
-                    offset = (-8, 0)
-                self.ax.annotate(rf'${lbl}$', xy=(0, y), xycoords='data',
-                                textcoords='offset points', xytext=offset,
-                                ha='right', va='center', fontsize=12, zorder=10,
-                                bbox=dict(boxstyle='round,pad=0.1', facecolor='white', edgecolor='none', alpha=self.alpha))
+                    if ydelta is not None and ydelta > 0:
+                        y_start = np.ceil(self.y_min / ydelta)
+                        y_end = np.floor(self.y_max / ydelta)
+                        raw_yticks = [k * ydelta for k in range(int(y_start), int(y_end) + 1)]
+                    else:
+                        y0 = np.floor(self.y_min)
+                        y1 = np.ceil(self.y_max)
+                        if abs(y1 - y0) < 1e-6:
+                            raw_yticks = [y0 - 1, y0, y0 + 1]
+                        else:
+                            raw_yticks = list(np.linspace(y0, y1, 3))
+            else:
+                raw_yticks = list(effective_yticks)
+                if ydelta is not None:
+                    warnings.warn("yticks_delta ignorado porque yticks no está en modo 'auto'")
+
+                if ytick_labels not in (None, 'auto'):
+                    if len(raw_yticks) != len(ytick_labels):
+                        raise ValueError("ytick_labels y yticks deben tener la misma longitud")
+                    manual_yticks = list(raw_yticks)
+                    manual_ylabels = list(ytick_labels)
+                elif self.ytick_labels is not None:
+                    if len(raw_yticks) != len(self.ytick_labels):
+                        raise ValueError("ytick_labels y yticks deben tener la misma longitud (init)")
+                    manual_yticks = list(raw_yticks)
+                    manual_ylabels = list(self.ytick_labels)
+
+            raw_yticks = unique_sorted(raw_yticks, tol)
+
+            ylabels = []
+            for y in raw_yticks:
+                label = None
+                for ym, lbl in zip(manual_yticks, manual_ylabels):
+                    if abs(ym - y) <= tol:
+                        label = lbl
+                        break
+                if label is None:
+                    use_frac = self.fraction_ticks and (
+                        (isinstance(effective_yticks, str) and effective_yticks == 'auto') or
+                        (ytick_labels in (None, 'auto'))
+                    )
+                    if use_frac:
+                        f = Fraction(y).limit_denominator(12)
+                        label = f"{f.numerator}/{f.denominator}" if f.denominator != 1 else f"{f.numerator}"
+                    else:
+                        label = f'{y:g}'
+                ylabels.append(label)
+
+            return raw_yticks, ylabels
+        def filter_yticks(raw_yticks, ylabels, raw_xticks, tol):
+            has_xtick_zero = any(abs(x) <= tol for x in raw_xticks)
+            if has_xtick_zero:
+                filtered_yticks = []
+                filtered_ylabels = []
+                for y, lbl in zip(raw_yticks, ylabels):
+                    if abs(y) <= tol:
+                        continue
+                    filtered_yticks.append(y)
+                    filtered_ylabels.append(lbl)
+                return filtered_yticks, filtered_ylabels
+            else:
+                return raw_yticks, ylabels
+
+        def px_to_data_length(tick_px):
+            origin_disp = self.ax.transData.transform((0, 0))
+            up_disp = origin_disp + np.array([0, tick_px])
+            right_disp = origin_disp + np.array([tick_px, 0])
+            origin_data = np.array(self.ax.transData.inverted().transform(origin_disp))
+            up_data = np.array(self.ax.transData.inverted().transform(up_disp))
+            right_data = np.array(self.ax.transData.inverted().transform(right_disp))
+            dy = up_data[1] - origin_data[1]
+            dx = right_data[0] - origin_data[0]
+            return dx, dy
+
+        def draw_xticks(raw_xticks, xlabels, impulse_positions, impulse_positions_areas, dx, dy, tol):
+            xlim = self.ax.get_xlim()
+            for x, lbl in zip(raw_xticks, xlabels):
+                if xlim[0] <= x <= xlim[1]:
+                    self.ax.plot([x, x], [0 - dy/2, 0 + dy/2], transform=self.ax.transData,
+                                color='black', linewidth=1.2, clip_on=False)
+                    area = None
+                    for loc, a in zip(impulse_positions, impulse_positions_areas):
+                        if abs(loc - x) <= tol:
+                            area = a
+                            break
+                    y_off = +8 if (area is not None and area < 0) else -8
+                    offset = (-8, y_off) if abs(x) < tol else (0, y_off)
+                    va = 'bottom' if y_off > 0 else 'top'
+                    self.ax.annotate(rf'${lbl}$', xy=(x, 0), xycoords='data',
+                                    textcoords='offset points', xytext=offset,
+                                    ha='center', va=va, fontsize=12, zorder=10,
+                                    bbox=dict(boxstyle='round,pad=0.1', facecolor='white',
+                                            edgecolor='none', alpha=self.alpha))
+
+        def draw_yticks(raw_yticks, ylabels, dx, dy):
+            ylim = self.ax.get_ylim()
+            for y, lbl in zip(raw_yticks, ylabels):
+                if ylim[0] <= y <= ylim[1]:
+                    self.ax.plot([0 - dx/2, 0 + dx/2], [y, y], transform=self.ax.transData,
+                                color='black', linewidth=1.2, clip_on=False)
+                    offset = (-4, -16) if abs(y) < 1e-10 else (-4, 2)
+                    self.ax.annotate(rf'${lbl}$', xy=(0, y), xycoords='data',
+                                    textcoords='offset points', xytext=offset,
+                                    ha='right', va='bottom', fontsize=12, zorder=10,
+                                    bbox=dict(boxstyle='round,pad=0.1', facecolor='white',
+                                            edgecolor='none', alpha=self.alpha))
+
+        # -- Código principal draw_ticks --
+
+        # 0. Determinar effective ticks
+        effective_xticks = xticks if xticks is not None else getattr(self, 'init_xticks_arg', None)
+        effective_yticks = yticks if yticks is not None else getattr(self, 'init_yticks_arg', None)
+
+        # 1. Tamaño del tick en px
+        tick_px = tick_size_px if tick_size_px is not None else self.tick_size_px
+
+        # 2. Rango y tolerancia
+        t_min, t_max = self.horiz_range
+        tol = 1e-8 * max(1.0, abs(t_max - t_min))
+
+        # 3. Impulsos periódicos
+        impulse_positions, impulse_positions_areas = get_impulse_positions_and_areas(t_min, t_max, tol)
+
+        # 4 y 5. Procesar ticks X + etiquetas
+        raw_xticks, xlabels = generate_xticks(effective_xticks, impulse_positions, tol, t_min, t_max)
+
+        # 6 y 7. Procesar ticks Y + etiquetas
+        raw_yticks, ylabels = generate_yticks(effective_yticks, tol)
+
+        # 8. Filtrar ytick=0 si xtick=0 existe
+        raw_yticks, ylabels = filter_yticks(raw_yticks, ylabels, raw_xticks, tol)
+
+        # 9. Conversión px -> datos
+        dx, dy = px_to_data_length(tick_px)
+
+        # 10 Dibujar marcas xticks + etiquetas
+        draw_xticks(raw_xticks, xlabels, impulse_positions, impulse_positions_areas, dx, dy, tol)
+
+        # 11. Dibujar marcas yticks + etiquetas
+        draw_yticks(raw_yticks, ylabels, dx, dy)
 
 
     def draw_labels(self):
@@ -679,13 +850,63 @@ class SignalPlotter:
             plt.show()
         plt.close(self.fig)
 
-    def plot(self):
+    def plot(self, name=None):
+        if name:
+            if name not in self.signal_defs:
+                raise ValueError(f"Señal '{name}' no definida")
+            self.current_name = name
+            self.func_name = name
+            self.expr = self.signal_defs[name]
+
+            # Determinar la variable independiente
+            free_vars = list(self.expr.free_symbols)
+            if free_vars:
+                self.var = free_vars[0]
+            elif name in self.var_symbols:
+                self.var = self.var_symbols[name]
+            else:
+                raise ValueError(f"No se pudo determinar la variable independiente para la señal '{name}'")
+
+            # Asignar etiquetas para los ejes
+            self.xlabel = str(self.var)
+            self.ylabel = f"{self.func_name}({self.xlabel})"
+            if hasattr(self, 'custom_labels') and self.func_name in self.custom_labels:
+                self.ylabel = self.custom_labels[self.func_name]
+
+            # Guardar periodo global anterior
+            prev_periodo = self.periodo
+
+            # Asignar periodo individual si existe
+            if hasattr(self, 'signal_periods') and name in self.signal_periods:
+                self.periodo = self.signal_periods[name]
+            else:
+                self.periodo = None
+
+            self.expr_cont = self._remove_dirac_terms()
+            self.impulse_locs, self.impulse_areas = self._extract_impulses()
+            self.var = next(iter(self.var_symbols.values()))
+            self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self._get_local_dict()])
+            self.t_vals = np.linspace(*self.horiz_range, self.num_points)
+            if self.periodo is not None:
+                T = self.periodo
+                self.t_vals = ((self.t_vals + T/2) % T) - T/2
+                self.t_vals.sort()
+            self.fig, self.ax = plt.subplots(figsize=self.figsize)
+            self._prepare_plot()
+
         self.setup_axes()
         self.draw_function()
         self.draw_impulses()
+        self.ax.relim()
+        self.ax.autoscale_view()
+
         self.draw_ticks()
         self.draw_labels()
         self.show()
+
+        # ✅ Restaurar periodo original al final del todo
+        if name:
+            self.periodo = prev_periodo
 
     # def animate_signal(self, interval=20, save_path=None):
     #     """
