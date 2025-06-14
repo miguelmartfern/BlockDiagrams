@@ -90,7 +90,8 @@ class SignalPlotter:
         d = {
             'u':            sp.Heaviside,
             'rect':         lambda t: sp.Heaviside(t + 0.5) - sp.Heaviside(t - 0.5),
-            'tri':          lambda t: (1 - abs(t)) * sp.Heaviside(1 - abs(t)),
+            'tri':          lambda t: (1 - abs(t)) * sp.Heaviside(1 - abs(t), 0),   # 0 explícito en bordes de triángulo
+            'ramp':         lambda t: sp.Heaviside(t, 0) * t,
             'sinc':         lambda t: sp.sin(sp.pi * t) / (sp.pi * t),
             'delta':        sp.DiracDelta,
             'DiracDelta':   sp.DiracDelta,
@@ -195,54 +196,71 @@ class SignalPlotter:
                 self.custom_labels = {}
             self.custom_labels[name] = label
 
-        # ✅ Guardar periodo individual con nombre 'period'
         if period is not None:
             if not hasattr(self, 'signal_periods'):
                 self.signal_periods = {}
             self.signal_periods[name] = period
 
+            # Expandir la señal como suma de traslaciones dentro del rango
+            horiz_min, horiz_max = self.horiz_range
+            num_periods = int(np.ceil((horiz_max - horiz_min) / period))
+            k_range = range(-num_periods - 2, num_periods + 3)  # márgenes extra
+
+            # expandido como suma de expresiones desplazadas (en SymPy)
+            expanded_expr = sum(parsed_expr.subs(var_sym, var_sym - period * k) for k in k_range)
+
+            self.signal_defs[name] = expanded_expr
+        else:
+            self.signal_defs[name] = parsed_expr
+
 
     def _prepare_plot(self):
-        # recompute y-range
         try:
+            # Evaluar señal continua
             y_vals = self.func(self.t_vals)
             y_vals = np.array(y_vals, dtype=np.float64)
             y_vals = y_vals[np.isfinite(y_vals)]
-            if self.vert_range:
-                self.y_min, self.y_max = self.vert_range
-            else:
-                # Valores continuos
-                if y_vals.size > 0:
-                    cont_min = np.min(y_vals)
-                    cont_max = np.max(y_vals)
-                else:
-                    cont_min = 0.0
-                    cont_max = 0.0
 
-                # Impulsos
-                if self.impulse_areas:
-                    imp_min = min(self.impulse_areas)
-                    imp_max = max(self.impulse_areas)
-                    # El rango debe abarcar ambos:
+            if y_vals.size > 0:
+                cont_min = np.min(y_vals)
+                cont_max = np.max(y_vals)
+            else:
+                cont_min = 0.0
+                cont_max = 0.0
+
+            # Impulsos visibles en el rango horizontal
+            if self.impulse_locs and self.impulse_areas:
+                t_min, t_max = self.horiz_range
+                filtered_areas = [
+                    area for loc, area in zip(self.impulse_locs, self.impulse_areas)
+                    if t_min <= loc <= t_max
+                ]
+                if filtered_areas:
+                    imp_min = min(filtered_areas)
+                    imp_max = max(filtered_areas)
                     overall_min = min(cont_min, imp_min, 0.0)
                     overall_max = max(cont_max, imp_max, 0.0)
                 else:
                     overall_min = min(cont_min, 0.0)
                     overall_max = max(cont_max, 0.0)
+            else:
+                overall_min = min(cont_min, 0.0)
+                overall_max = max(cont_max, 0.0)
 
-                # Si el rango es muy pequeño, expandir un poco para visibilidad
-                if abs(overall_max - overall_min) < 1e-2:
-                    overall_min -= 1.0
-                    overall_max += 1.0
+            # Ajuste si el rango es demasiado pequeño
+            if abs(overall_max - overall_min) < 1e-2:
+                overall_min -= 1.0
+                overall_max += 1.0
 
+            # Aplicar rango vertical explícito si se indicó
+            if self.vert_range:
+                self.y_min, self.y_max = self.vert_range
+            else:
                 self.y_min, self.y_max = overall_min, overall_max
 
-            # Segunda comprobación para evitar rango nulo o casi nulo
-            if abs(self.y_max - self.y_min) < 1e-2:
-                self.y_min -= 1.0
-                self.y_max += 1.0
         except Exception:
             self.y_min, self.y_max = -1, 1
+
 
 
     def _eval_func_array(self, t):
@@ -250,10 +268,9 @@ class SignalPlotter:
         return np.full_like(t, y, dtype=float) if np.isscalar(y) else np.array(y, dtype=float)
 
     def _extract_impulses(self):
-        impulse_locs = []
-        impulse_areas = []
-        
-        # 🔧 Fuerza expansión para detectar DiracDelta correctamente
+        impulse_map = {}
+
+        # Expandir y descomponer en términos
         expr_terms = self.expr.expand().as_ordered_terms()
 
         for term in expr_terms:
@@ -262,26 +279,38 @@ class SignalPlotter:
                 arg = delta.args[0]
                 roots = sp.solve(arg, self.var)
                 amp = term.coeff(delta)
-
                 d_arg = sp.diff(arg, self.var)
                 scale = sp.Abs(d_arg)
 
                 for r in roots:
                     try:
                         scale_val = float(scale.subs(self.var, r))
-                    except Exception:
-                        scale_val = 1.0
+                        amp_eval = amp.subs(self.var, r).doit().evalf()
+                        effective_amp = float(amp_eval) / scale_val if scale_val != 0 else 0.0
+                        if abs(effective_amp) > 1e-6:
+                            loc = float(r)
+                            # Buscar ubicación cercana ya existente (tolerancia)
+                            found = False
+                            for known_loc in impulse_map:
+                                if abs(known_loc - loc) < 1e-8:
+                                    impulse_map[known_loc] += effective_amp
+                                    found = True
+                                    break
+                            if not found:
+                                impulse_map[loc] = effective_amp
+                    except (TypeError, ValueError, ZeroDivisionError):
+                        continue
 
-                    try:
-                        amp_at_r = amp.subs(self.var, r).evalf()
-                        effective_amp = float(amp_at_r) / scale_val if scale_val != 0 else 0.0
-                    except Exception:
-                        effective_amp = 0.0
-
-                    impulse_locs.append(float(r))
-                    impulse_areas.append(effective_amp)
+        # Filtrar deltas resultantes ≠ 0 tras sumar contribuciones
+        impulse_locs = []
+        impulse_areas = []
+        for loc, area in impulse_map.items():
+            if abs(area) > 1e-6:
+                impulse_locs.append(loc)
+                impulse_areas.append(area)
 
         return impulse_locs, impulse_areas
+
 
 
     def _remove_dirac_terms(self):
@@ -289,89 +318,63 @@ class SignalPlotter:
 
     def draw_function(self):
         """
-        Dibuja la señal continua. Si 'periodo' está definido, repite la forma de onda en todo el rango horizontal.
-        Añade puntos suspensivos en los extremos si la señal está truncada.
+        Dibuja la señal continua sin asumir periodicidad.
+        Añade puntos suspensivos si hay valores significativos fuera del rango,
+        o siempre si la señal fue definida como periódica.
         """
-        # preparar datos de trazado
         t0, t1 = self.horiz_range
-        if self.periodo is None:
-            t_plot = self.t_vals
-            y_plot = self._eval_func_array(t_plot)
-        else:
-            # señal periódica
-            T = self.periodo
-            base_t = np.linspace(-T/2, T/2, self.num_points)
-            base_y = self._eval_func_array(base_t)
-            k_min = int(np.floor((t0 + T/2)/T))
-            k_max = int(np.floor((t1 + T/2)/T))
-            segs = []
-            for k in range(k_min, k_max+1):
-                t_seg = base_t + k*T
-                mask = (t_seg >= t0) & (t_seg <= t1)
-                segs.append((t_seg[mask], np.array(base_y)[mask]))
-            # concatenar y ordenar
-            t_plot = np.concatenate([seg[0] for seg in segs])
-            y_plot = np.concatenate([seg[1] for seg in segs])
-            order = np.argsort(t_plot)
-            t_plot = t_plot[order]
-            y_plot = y_plot[order]
-        # asegurar arrays
+        t_plot = self.t_vals
+        y_plot = self._eval_func_array(t_plot)
+
+        # Asegurar arrays y formato
         t_plot = np.array(t_plot)
         y_plot = np.array(y_plot)
         if y_plot.ndim == 0:
             y_plot = np.full_like(t_plot, y_plot, dtype=float)
-        # dibujar la curva
+
+        # Dibujar curva
         self.ax.plot(t_plot, y_plot, color=self.color, linewidth=2.5, zorder=5)
 
-        # decidir puntos suspensivos mediante integración si no es periódica
+        # Decidir puntos suspensivos
         delta = (t1 - t0) * 0.05
         tol = 1e-3
         span = t1 - t0
         draw_left = draw_right = False
-        if self.periodo is not None:
+
+        # Mostrar siempre si la señal es periódica
+        if hasattr(self, 'signal_periods') and self.current_name in self.signal_periods:
             draw_left = draw_right = True
         else:
-            N = max(10, int(0.05*self.num_points))
-            xs_left = np.linspace(t0 - 0.05*span, t0, N)
+            N = max(10, int(0.05 * self.num_points))
+            xs_left = np.linspace(t0 - 0.05 * span, t0, N)
             ys_left = np.abs(self._eval_func_array(xs_left))
             if np.trapz(ys_left, xs_left) > tol:
                 draw_left = True
-            xs_right = np.linspace(t1, t1 + 0.05*span, N)
+
+            xs_right = np.linspace(t1, t1 + 0.05 * span, N)
             ys_right = np.abs(self._eval_func_array(xs_right))
             if np.trapz(ys_right, xs_right) > tol:
                 draw_right = True
-        y_mid = (self.y_min + 2 * self.y_max)/3
+
+        # Dibujar puntos suspensivos
+        y_mid = (self.y_min + 2 * self.y_max) / 3
         if draw_left:
-            self.ax.text(t0 - delta, y_mid, r'$\cdots$', ha='left', va='center', color=self.color, fontsize=14, zorder=10)
+            self.ax.text(t0 - delta, y_mid, r'$\cdots$', ha='left', va='center',
+                        color=self.color, fontsize=14, zorder=10)
         if draw_right:
-            self.ax.text(t1 + delta, y_mid, r'$\cdots$', ha='right', va='center', color=self.color,fontsize=14, zorder=10)
+            self.ax.text(t1 + delta, y_mid, r'$\cdots$', ha='right', va='center',
+                        color=self.color, fontsize=14, zorder=10)
+
 
     def draw_impulses(self):
         """
         Dibuja los impulsos (Dirac) en las ubicaciones extraídas de la expresión.
-        Si 'periodo' está definido, repite cada impulso en t0 + k*T dentro del rango horizontal.
+        No asume periodicidad.
         """
-        # Rango horizontal
         t_min, t_max = self.horiz_range
-        # Período
-        T = self.periodo
-
-        for base_t0, amp in zip(self.impulse_locs, self.impulse_areas):
-            if T is None:
-                # Sin periodicidad: dibujar solo en la ubicación base
-                if t_min <= base_t0 <= t_max:
-                    self._draw_single_impulse(base_t0, amp)
-            else:
-                # Señal periódica: calcular k_min y k_max de forma que t0 + kT esté en [t_min, t_max]
-                # Queremos k tales que: t_min <= base_t0 + k*T <= t_max
-                # => (t_min - base_t0)/T <= k <= (t_max - base_t0)/T
-                # Se toman los enteros entre floor(...) a ceil(...).
-                k_min = int(np.floor((t_min - base_t0) / T))
-                k_max = int(np.ceil((t_max - base_t0) / T))
-                for k in range(k_min, k_max + 1):
-                    t_k = base_t0 + k * T
-                    if t_min <= t_k <= t_max:
-                        self._draw_single_impulse(t_k, amp)
+        for t0, amp in zip(self.impulse_locs, self.impulse_areas):
+            if t_min <= t0 <= t_max:
+                self._draw_single_impulse(t0, amp)
 
     def _draw_single_impulse(self, t0, amp):
         """
@@ -381,7 +384,7 @@ class SignalPlotter:
         """
         # Flecha desde (t0,0) hasta (t0, amp)
         self.ax.annotate(
-            '', xy=(t0, amp), xytext=(t0, 0),
+            '', xy=(t0, amp + 0.01 * (self.y_max - self.y_min)), xytext=(t0, 0),
             arrowprops=dict(
                 arrowstyle='-|>',
                 linewidth=2.5,
@@ -404,11 +407,10 @@ class SignalPlotter:
             x_offset = 0.0
             ha = 'center'
 
-        # Desplazamiento vertical normal: ligeramente por encima (o debajo) de amp
-        y_offset = 0.03 * np.sign(amp)
-        # Ubicación final de la etiqueta
+        # Alinear etiqueta más arriba de la curva continua si es necesario
+        arrow_headroom = 0.05 * (self.y_max - self.y_min)
         x_text = t0 + x_offset
-        y_text = amp + y_offset
+        y_text = amp + arrow_headroom
 
         self.ax.text(
             x_text, y_text,
@@ -442,10 +444,10 @@ class SignalPlotter:
             # En caso degenerate, mantener un rango mínimo
             y_margin = 1.0
         else:
-            y_margin = 0.2 * y_range
+            y_margin = 0.3 * y_range
 
         self.ax.set_xlim(self.horiz_range[0] - x_margin, self.horiz_range[1] + x_margin)
-        self.ax.set_ylim(self.y_min - y_margin, self.y_max + 1.3 * y_margin)
+        self.ax.set_ylim(self.y_min - y_margin, self.y_max + 1.6 * y_margin)
 
         self.ax.annotate('', xy=(self.ax.get_xlim()[1], 0), xytext=(self.ax.get_xlim()[0], 0),
                          arrowprops=dict(arrowstyle='-|>', linewidth=1.5, color='black',
@@ -874,23 +876,23 @@ class SignalPlotter:
                 self.ylabel = self.custom_labels[self.func_name]
 
             # Guardar periodo global anterior
-            prev_periodo = self.periodo
+            # prev_periodo = self.periodo
 
             # Asignar periodo individual si existe
-            if hasattr(self, 'signal_periods') and name in self.signal_periods:
-                self.periodo = self.signal_periods[name]
-            else:
-                self.periodo = None
+            # if hasattr(self, 'signal_periods') and name in self.signal_periods:
+            #     self.periodo = self.signal_periods[name]
+            # else:
+            #     self.periodo = None
 
             self.expr_cont = self._remove_dirac_terms()
             self.impulse_locs, self.impulse_areas = self._extract_impulses()
             self.var = next(iter(self.var_symbols.values()))
             self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self._get_local_dict()])
             self.t_vals = np.linspace(*self.horiz_range, self.num_points)
-            if self.periodo is not None:
-                T = self.periodo
-                self.t_vals = ((self.t_vals + T/2) % T) - T/2
-                self.t_vals.sort()
+            # if self.periodo is not None:
+            #     T = self.periodo
+            #     self.t_vals = ((self.t_vals + T/2) % T) - T/2
+            #     self.t_vals.sort()
             self.fig, self.ax = plt.subplots(figsize=self.figsize)
             self._prepare_plot()
 
@@ -905,8 +907,8 @@ class SignalPlotter:
         self.show()
 
         # ✅ Restaurar periodo original al final del todo
-        if name:
-            self.periodo = prev_periodo
+        # if name:
+        #     self.periodo = prev_periodo
 
     # def animate_signal(self, interval=20, save_path=None):
     #     """
