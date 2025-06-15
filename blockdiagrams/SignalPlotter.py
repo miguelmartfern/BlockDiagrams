@@ -90,14 +90,14 @@ class SignalPlotter:
 
     def _get_local_dict(self):
         d = {
-            'u':            sp.Heaviside,
+            'u':            lambda t: sp.Heaviside(t, 0.5),
             'rect':         lambda t: sp.Piecewise((1, sp.And(t >= -0.5, t <= 0.5)), (0, True)),
             'tri':          lambda t: (1 - abs(t)) * sp.Heaviside(1 - abs(t), 0),   # 0 explícito en bordes de triángulo
             'ramp':         lambda t: sp.Heaviside(t, 0) * t,
             'sinc':         lambda t: sp.sin(sp.pi * t) / (sp.pi * t),
             'delta':        sp.DiracDelta,
             'DiracDelta':   sp.DiracDelta,
-            'Heaviside':    sp.Heaviside,
+            'Heaviside':    lambda t: sp.Heaviside(t, 0.5),
             'pi':           sp.pi,
             'sin':          sp.sin,
             'cos':          sp.cos,
@@ -234,7 +234,7 @@ class SignalPlotter:
             else:
                 cont_min = 0.0
                 cont_max = 0.0
-
+           
             # Impulsos visibles en el rango horizontal
             if self.impulse_locs and self.impulse_areas:
                 t_min, t_max = self.horiz_range
@@ -253,6 +253,7 @@ class SignalPlotter:
             else:
                 overall_min = min(cont_min, 0.0)
                 overall_max = max(cont_max, 0.0)
+
 
             # Ajuste si el rango es demasiado pequeño
             if abs(overall_max - overall_min) < 1e-2:
@@ -453,6 +454,7 @@ class SignalPlotter:
         # Rango vertical original calculado en _prepare_plot: self.y_min, self.y_max
         y_min, y_max = self.y_min, self.y_max
         y_range = y_max - y_min
+
         # Extensión de un 10% adicional por cada lado => total 1.2×
         if y_range <= 0:
             # En caso degenerate, mantener un rango mínimo
@@ -937,170 +939,323 @@ class SignalPlotter:
         self.draw_labels()
         self.show()
 
-    # Asumimos que esta clase ya contiene los métodos add_signal y plot
-    # Añadimos soporte para visualización de convolución
+    # Definir las transformaciones a nivel global para uso posterior
+    def _get_transformations(self):
+        return self.transformations
 
-import sympy as sp
-import numpy as np
-import matplotlib.pyplot as plt
-from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
+    def _setup_figure(self):
+        self.fig, self.ax = plt.subplots(figsize=self.figsize)
+        self._prepare_plot()
+        self.fig.subplots_adjust(right=0.9, top=0.85, bottom=0.15)
 
-# Definir las transformaciones a nivel global para uso posterior
-def _get_transformations(self):
-    return self.transformations
+    def plot_convolution_view(self, expr_str, t_val, label=None, tau=None, t=None):
+        import re
+        local_dict = self._get_local_dict()
 
-# Asigna como método estático de la clase
-SignalPlotter._get_transformations = staticmethod(_get_transformations)
+        # Definir variables simbólicas con nombres personalizados o por defecto
+        if tau is None:
+            tau = local_dict.get('tau')
+        elif isinstance(tau, str):
+            tau = sp.Symbol(tau)
+        if t is None:
+            t = local_dict.get('t')
+        elif isinstance(t, str):
+            t = sp.Symbol(t)
 
-def _setup_figure(self):
-    self.fig, self.ax = plt.subplots(figsize=self.figsize)
-    self._prepare_plot()
-    self.fig.subplots_adjust(right=0.9, top=0.85, bottom=0.15)
+        local_dict.update({'tau': tau, 't': t, str(tau): tau, str(t): t})
 
-def plot_convolution_view(self, expr_str, t_val, label=None, tau=None, t=None):
-    local_dict = self._get_local_dict()
+        # Identificar el nombre de la señal
+        if "(" in expr_str:
+            name = expr_str.split("(")[0].strip()
+            if name not in self.signal_defs:
+                raise ValueError(f"La señal '{name}' no está definida.")
+            expr_base = self.signal_defs[name]
+            var_base = self.var_symbols.get(name, t)
+        else:
+            raise ValueError("Expresión inválida: se esperaba algo como 'x(t-tau)'.")
 
-    # Definir variables simbólicas con nombres personalizados o por defecto
-    if tau is None:
-        tau = local_dict.get('tau')
-    elif isinstance(tau, str):
-        tau = sp.Symbol(tau)
-    if t is None:
-        t = local_dict.get('t')
-    elif isinstance(t, str):
-        t = sp.Symbol(t)
+        parsed_expr = parse_expr(expr_str.replace(name, "", 1), local_dict)
+        expr = expr_base.subs(var_base, parsed_expr)
 
-    local_dict.update({'tau': tau, 't': t, str(tau): tau, str(t): t})
-
-    # Identificar el nombre de la señal
-    if "(" in expr_str:
-        name = expr_str.split("(")[0].strip()
-        if name not in self.signal_defs:
-            raise ValueError(f"La señal '{name}' no está definida.")
-        expr_base = self.signal_defs[name]
-        var_base = self.var_symbols.get(name, t)
-    else:
-        raise ValueError("Expresión inválida: se esperaba algo como 'x(t-tau)'.")
-
-    # Sustituir manualmente como en plot_convolution_steps
-    expr = expr_base.subs(var_base, parse_expr(expr_str.replace(name, "", 1), local_dict))
-    expr_evaluated = expr.subs(t, t_val)
-
-    # xticks personalizados si xticks era 'auto'
-    xticks = self.init_xticks_arg
-    if xticks == 'auto':
-        xticks_custom = [t_val]
-        xtick_labels_custom = [sp.latex(t)]
-    elif isinstance(xticks, (list, tuple)):
-        xticks_custom = [t_val - v for v in xticks]
-        xtick_labels_custom = []
-        for v in xticks:
-            delta = - v
-            if delta == 0:
-                label = sp.latex(t)
-            elif delta > 0:
-                label = fr"{sp.latex(t)}+{delta}"
-            else:
-                label = fr"{sp.latex(t)}{delta}"
-            xtick_labels_custom.append(label)
-    else:
+        # Analizar forma de la variable: t - tau o t + tau
+        xticks = self.init_xticks_arg
+        horiz_range = self.horiz_range
         xticks_custom = None
         xtick_labels_custom = None
 
-    # Continuar con el dibujo
-    self.expr = expr_evaluated
-    self.var = tau
-    self.xlabel = sp.latex(tau)
-    tau_str = sp.latex(tau)
-    t_str = sp.latex(t)
-    self.ylabel = label or expr_str.replace("tau", tau_str).replace("t", t_str)
+        if isinstance(parsed_expr, sp.Expr):
+            diff1 = parsed_expr - tau
+            if diff1.has(t):
+                diff2 = parsed_expr - t
+                coef = diff2.coeff(tau)
+                if coef == -1:
+                    # Caso t - tau => invertir ejes y etiquetas
+                    if xticks == 'auto':
+                        xticks_custom = [t_val]
+                        xtick_labels_custom = [sp.latex(t)]
+                    elif isinstance(xticks, (list, tuple)):
+                        xticks_custom = [t_val - v for v in xticks][::-1]
+                        xtick_labels_custom = [
+                            f"{sp.latex(t)}" if v == 0 else f"{sp.latex(t)}{'-' if v > 0 else '+'}{abs(v)}"
+                            for v in xticks
+                        ][::-1]
+                    horiz_range = (t_val - np.array(self.horiz_range)[::-1]).tolist()
 
-    self.func = sp.lambdify(self.var, self.expr, modules=["numpy"])
-    # I get the inverted-shifted range for the horizontal axis (reverse order)
-    horiz_range = t_val - np.array(self.horiz_range)[::-1]
-    self.t_vals = np.linspace(*horiz_range, self.num_points)
+                elif coef == 1:
+                    # Caso t + tau => solo desplazamiento
+                    if xticks == 'auto':
+                        xticks_custom = [t_val]
+                        xtick_labels_custom = [sp.latex(t)]
+                    elif isinstance(xticks, (list, tuple)):
+                        xticks_custom = [v - t_val for v in xticks]
+                        xtick_labels_custom = [
+                            f"-{sp.latex(t)}" if v == 0 else f"-{sp.latex(t)}{'+' if v > 0 else '-'}{abs(v)}"
+                            for v in xticks
+                        ]
+                    horiz_range = (np.array(self.horiz_range) - t_val).tolist()
 
-    self._setup_figure()
-    self.impulse_locs, self.impulse_areas = self._extract_impulses()
-    self.setup_axes(horiz_range)
-    self.draw_function(horiz_range)
-    self.draw_impulses()
-    self.draw_ticks(xticks=xticks_custom, xtick_labels=xtick_labels_custom)
-    self.draw_labels()
-    self.show()
+        expr_evaluated = expr.subs(t, t_val)
 
-
-
-
-
-def plot_convolution_steps(self, x_name, h_name, t_val, tau=None, t=None):
-    local_dict = self._get_local_dict()
-
-    # Usar símbolos de 'local_dict' si están definidos
-    if tau is None:
-        tau = local_dict.get('tau')
-    elif isinstance(tau, str):
-        tau = sp.Symbol(tau)
-
-    if t is None:
-        t = local_dict.get('t')
-    elif isinstance(t, str):
-        t = sp.Symbol(t)
-
-    x_expr = self.signal_defs[x_name].subs(self.var_symbols[x_name], tau)
-    h_expr = self.signal_defs[h_name].subs(self.var_symbols[h_name], tau)
-    x_shift = x_expr.subs(tau, t - tau).subs(t, t_val)
-    h_shift = h_expr.subs(tau, t - tau).subs(t, t_val)
-
-    tau_str = sp.latex(tau)
-    t_str = sp.latex(t)
-
-    # xticks personalizados solo para x_shift y h_shift
-    xticks = self.init_xticks_arg
-    if xticks == 'auto':
-        xticks_shifted = [t_val]
-        xtick_labels_shifted = [f"{t_str}"]
-    elif isinstance(xticks, (list, tuple)):
-        xticks_shifted = [t_val - v for v in xticks]
-        xtick_labels_shifted = []
-        for v in xticks:
-            delta = - v
-            if delta == 0:
-                label = fr"{t_str}"
-            elif delta > 0:
-                label = fr"{t_str}+{delta}"
-            else:
-                label = fr"{t_str}{delta}"  # delta es negativo, así que el signo ya va incluido
-            xtick_labels_shifted.append(label)
-    else:
-        xticks_shifted = None
-        xtick_labels_shifted = None
-
-    horiz_range = self.horiz_range
-    # I get the inverted-shifted range for the horizontal axis (reverse order)
-    horiz_range_shifted = t_val - np.array(horiz_range)[::-1]
-
-    items = [
-        (x_expr, fr"{x_name}({tau_str})", None, None, horiz_range),
-        (h_expr, fr"{h_name}({tau_str})", None, None, horiz_range),
-        (x_shift, fr"{x_name}({t_str}-{tau_str})", xticks_shifted, xtick_labels_shifted, horiz_range_shifted),
-        (h_shift, fr"{h_name}({t_str}-{tau_str})", xticks_shifted, xtick_labels_shifted, horiz_range_shifted),
-    ]
-
-    for expr, label, xticks_custom, xtick_labels_custom, horiz_range_custom in items:
-        self.expr = expr
+        # Preparar etiquetas
+        self.expr = expr_evaluated
         self.var = tau
-        self.xlabel = fr"\{tau}"
-        self.ylabel = label
-        self.func = sp.lambdify(self.var, self.expr, modules=["numpy"])
-        self.t_vals = np.linspace(*horiz_range_custom, self.num_points)
+        self.xlabel = sp.latex(tau)
+        tau_str = sp.latex(tau)
+        t_str = sp.latex(t)
+        if label:
+            self.ylabel = label
+        else:
+            self.ylabel = expr_str.replace("tau", tau_str).replace("t", t_str)
 
-        self._setup_figure()
+        # Dibujar
+        self.func = sp.lambdify(self.var, self.expr, modules=["numpy"])
+        self.t_vals = np.linspace(*horiz_range, self.num_points)
+
         self.impulse_locs, self.impulse_areas = self._extract_impulses()
-        self.setup_axes(horiz_range_custom)
-        self.draw_function(horiz_range_custom)
+        self._setup_figure()
+        # self._prepare_plot()
+        self.setup_axes(horiz_range)
+        self.draw_function(horiz_range)
         self.draw_impulses()
         self.draw_ticks(xticks=xticks_custom, xtick_labels=xtick_labels_custom)
+        self.draw_labels()
+        self.show()
+
+
+    def plot_convolution_steps(self, x_name, h_name, t_val, tau=None, t=None):
+        local_dict = self._get_local_dict()
+
+        # Usar símbolos de 'local_dict' si están definidos
+        if tau is None:
+            tau = local_dict.get('tau')
+        elif isinstance(tau, str):
+            tau = sp.Symbol(tau)
+
+        if t is None:
+            t = local_dict.get('t')
+        elif isinstance(t, str):
+            t = sp.Symbol(t)
+
+        x_expr = self.signal_defs[x_name].subs(self.var_symbols[x_name], tau)
+        h_expr = self.signal_defs[h_name].subs(self.var_symbols[h_name], tau)
+        x_shift = x_expr.subs(tau, t - tau).subs(t, t_val)
+        h_shift = h_expr.subs(tau, t - tau).subs(t, t_val)
+
+        tau_str = sp.latex(tau)
+        t_str = sp.latex(t)
+
+        # xticks personalizados solo para x_shift y h_shift
+        xticks = self.init_xticks_arg
+        if xticks == 'auto':
+            xticks_shifted = [t_val]
+            xtick_labels_shifted = [f"{t_str}"]
+        elif isinstance(xticks, (list, tuple)):
+            xticks_shifted = [t_val - v for v in xticks]
+            xtick_labels_shifted = []
+            for v in xticks:
+                delta = - v
+                if delta == 0:
+                    label = fr"{t_str}"
+                elif delta > 0:
+                    label = fr"{t_str}+{delta}"
+                else:
+                    label = fr"{t_str}{delta}"  # delta es negativo, así que el signo ya va incluido
+                xtick_labels_shifted.append(label)
+        else:
+            xticks_shifted = None
+            xtick_labels_shifted = None
+
+        horiz_range = self.horiz_range
+        # I get the inverted-shifted range for the horizontal axis (reverse order)
+        horiz_range_shifted = t_val - np.array(horiz_range)[::-1]
+
+        items = [
+            (x_expr, fr"{x_name}({tau_str})", None, None, horiz_range),
+            (h_expr, fr"{h_name}({tau_str})", None, None, horiz_range),
+            (x_shift, fr"{x_name}({t_str}-{tau_str})", xticks_shifted, xtick_labels_shifted, horiz_range_shifted),
+            (h_shift, fr"{h_name}({t_str}-{tau_str})", xticks_shifted, xtick_labels_shifted, horiz_range_shifted),
+        ]
+
+        for expr, label, xticks_custom, xtick_labels_custom, horiz_range_custom in items:
+            self.expr = expr
+            self.var = tau
+            self.xlabel = fr"\{tau}"
+            self.ylabel = label
+            self.func = sp.lambdify(self.var, self.expr, modules=["numpy"])
+            self.t_vals = np.linspace(*horiz_range_custom, self.num_points)
+
+            self.impulse_locs, self.impulse_areas = self._extract_impulses()
+            self._setup_figure()
+            # self._prepare_plot()
+            self.setup_axes(horiz_range_custom)
+            self.draw_function(horiz_range_custom)
+            self.draw_impulses()
+            self.draw_ticks(xticks=xticks_custom, xtick_labels=xtick_labels_custom)
+            self.draw_labels()
+            self.show()
+
+
+
+
+
+    def plot_convolution_result(self, x_name, h_name, num_points=None, show_expr=False):
+        import numpy as np
+        import sympy as sp
+        from scipy import integrate
+
+        t = sp.Symbol('t')
+        tau = sp.Symbol('tau')
+
+        if num_points is None:
+            num_points = self.num_points
+
+        # Obtener definiciones y variables
+        x_expr = self.signal_defs[x_name]
+        h_expr = self.signal_defs[h_name]
+        var_x = self.var_symbols[x_name]
+        var_h = self.var_symbols[h_name]
+
+        x_tau_expr = x_expr.subs(var_x, tau)
+        h_t_tau_expr = h_expr.subs(var_h, t - tau)
+
+        local_dict = self._get_local_dict()
+        t_vals = np.linspace(*self.horiz_range, num_points)
+        y_vals = []
+
+        # Caso 1: x contiene solo deltas => usar propiedad directa
+        if x_tau_expr.has(sp.DiracDelta):
+            y_expr = 0
+            for term in x_tau_expr.as_ordered_terms():
+                if term.has(sp.DiracDelta):
+                    args = term.args if term.func == sp.Mul else [term]
+                    scale = 1
+                    for a in args:
+                        if a.func == sp.DiracDelta:
+                            delta_arg = a.args[0]
+                        else:
+                            scale *= a
+                    shift = sp.solve(delta_arg, tau)
+                    if shift:
+                        y_expr += scale * h_expr.subs(var_h, t - shift[0])
+
+            # Extraer impulsos del resultado
+            impulse_locs = []
+            impulse_areas = []
+            for term in y_expr.as_ordered_terms():
+                if term.has(sp.DiracDelta):
+                    args = term.args if term.func == sp.Mul else [term]
+                    area = 1
+                    shift = 0
+                    for a in args:
+                        if a.func == sp.DiracDelta:
+                            sol = sp.solve(a.args[0], t)
+                            if sol:
+                                shift = float(sol[0])
+                        else:
+                            area *= a
+                    impulse_locs.append(shift)
+                    impulse_areas.append(float(area))
+
+            self.impulse_locs = impulse_locs
+            self.impulse_areas = impulse_areas
+            self.func = None
+
+        # Caso 2: h contiene solo deltas => usar propiedad directa
+        elif h_t_tau_expr.has(sp.DiracDelta):
+            y_expr = 0
+            for term in h_t_tau_expr.as_ordered_terms():
+                if term.has(sp.DiracDelta):
+                    args = term.args if term.func == sp.Mul else [term]
+                    scale = 1
+                    for a in args:
+                        if a.func == sp.DiracDelta:
+                            delta_arg = a.args[0]
+                        else:
+                            scale *= a
+                    shift = sp.solve(delta_arg, tau)
+                    if shift:
+                        y_expr += scale * x_tau_expr.subs(tau, shift[0])
+
+            # Extraer impulsos del resultado
+            impulse_locs = []
+            impulse_areas = []
+            for term in y_expr.as_ordered_terms():
+                if term.has(sp.DiracDelta):
+                    args = term.args if term.func == sp.Mul else [term]
+                    area = 1
+                    shift = 0
+                    for a in args:
+                        if a.func == sp.DiracDelta:
+                            sol = sp.solve(a.args[0], t)
+                            if sol:
+                                shift = float(sol[0])
+                        else:
+                            area *= a
+                    impulse_locs.append(shift)
+                    impulse_areas.append(float(area))
+
+            self.impulse_locs = impulse_locs
+            self.impulse_areas = impulse_areas
+            self.func = None
+
+        # Caso general: integrar numéricamente
+        else:
+            x_func_tau = sp.lambdify(tau, x_tau_expr, modules=["numpy"])
+            def h_func_tau_shifted(tau_val, t_val):
+                h_t_tau = h_t_tau_expr.subs(t, t_val)
+                h_func = sp.lambdify(tau, h_t_tau, modules=["numpy"])
+                return h_func(tau_val)
+
+            support_x = (self.horiz_range[0], self.horiz_range[1])
+            support_h = (self.horiz_range[0], self.horiz_range[1])
+
+            for t_val in t_vals:
+                a = max(support_x[0], t_val - support_h[1])
+                b = min(support_x[1], t_val - support_h[0])
+                if a >= b:
+                    y_vals.append(0)
+                    continue
+                integrand = lambda tau_val: x_func_tau(tau_val) * h_func_tau_shifted(tau_val, t_val)
+                try:
+                    val, _ = integrate.quad(integrand, a, b)
+                except Exception:
+                    val = 0
+                y_vals.append(val)
+
+            self.func = lambda t_: np.interp(t_, t_vals, y_vals)
+            self.impulse_locs = []
+            self.impulse_areas = []
+
+        self.expr = None
+        self.t_vals = t_vals
+        self.xlabel = "t"
+        self.ylabel = r"y(t)"
+
+        self._setup_figure()
+        self.setup_axes()
+        self.draw_function()
+        self.draw_impulses()
+        self.draw_ticks()
         self.draw_labels()
         self.show()
 
@@ -1108,208 +1263,14 @@ def plot_convolution_steps(self, x_name, h_name, t_val, tau=None, t=None):
 
 
 
-def plot_convolution_result(self, x_name, h_name, show_expr=False):
-    import numpy as np
-    import sympy as sp
-    from scipy import integrate
-
-    t = sp.Symbol('t')
-    tau = sp.Symbol('tau')
-
-    # Obtener definiciones y variables
-    x_expr = self.signal_defs[x_name]
-    h_expr = self.signal_defs[h_name]
-    var_x = self.var_symbols[x_name]
-    var_h = self.var_symbols[h_name]
-
-    x_tau_expr = x_expr.subs(var_x, tau)
-    h_t_tau_expr = h_expr.subs(var_h, t - tau)
-
-    local_dict = self._get_local_dict()
-    t_vals = np.linspace(*self.horiz_range, self.num_points)
-    y_vals = []
-
-    # Caso 1: x contiene solo deltas => usar propiedad directa
-    if x_tau_expr.has(sp.DiracDelta):
-        y_expr = 0
-        for term in x_tau_expr.as_ordered_terms():
-            if term.has(sp.DiracDelta):
-                args = term.args if term.func == sp.Mul else [term]
-                scale = 1
-                for a in args:
-                    if a.func == sp.DiracDelta:
-                        delta_arg = a.args[0]
-                    else:
-                        scale *= a
-                shift = sp.solve(delta_arg, tau)
-                if shift:
-                    y_expr += scale * h_expr.subs(var_h, t - shift[0])
-
-        # Extraer impulsos del resultado
-        impulse_locs = []
-        impulse_areas = []
-        for term in y_expr.as_ordered_terms():
-            if term.has(sp.DiracDelta):
-                args = term.args if term.func == sp.Mul else [term]
-                area = 1
-                shift = 0
-                for a in args:
-                    if a.func == sp.DiracDelta:
-                        sol = sp.solve(a.args[0], t)
-                        if sol:
-                            shift = float(sol[0])
-                    else:
-                        area *= a
-                impulse_locs.append(shift)
-                impulse_areas.append(float(area))
-
-        self.impulse_locs = impulse_locs
-        self.impulse_areas = impulse_areas
-        self.func = None
-
-    # Caso 2: h contiene solo deltas => usar propiedad directa
-    elif h_t_tau_expr.has(sp.DiracDelta):
-        y_expr = 0
-        for term in h_t_tau_expr.as_ordered_terms():
-            if term.has(sp.DiracDelta):
-                args = term.args if term.func == sp.Mul else [term]
-                scale = 1
-                for a in args:
-                    if a.func == sp.DiracDelta:
-                        delta_arg = a.args[0]
-                    else:
-                        scale *= a
-                shift = sp.solve(delta_arg, tau)
-                if shift:
-                    y_expr += scale * x_tau_expr.subs(tau, shift[0])
-
-        # Extraer impulsos del resultado
-        impulse_locs = []
-        impulse_areas = []
-        for term in y_expr.as_ordered_terms():
-            if term.has(sp.DiracDelta):
-                args = term.args if term.func == sp.Mul else [term]
-                area = 1
-                shift = 0
-                for a in args:
-                    if a.func == sp.DiracDelta:
-                        sol = sp.solve(a.args[0], t)
-                        if sol:
-                            shift = float(sol[0])
-                    else:
-                        area *= a
-                impulse_locs.append(shift)
-                impulse_areas.append(float(area))
-
-        self.impulse_locs = impulse_locs
-        self.impulse_areas = impulse_areas
-        self.func = None
-
-    # Caso general: integrar numéricamente
-    else:
-        x_func_tau = sp.lambdify(tau, x_tau_expr, modules=["numpy"])
-        def h_func_tau_shifted(tau_val, t_val):
-            h_t_tau = h_t_tau_expr.subs(t, t_val)
-            h_func = sp.lambdify(tau, h_t_tau, modules=["numpy"])
-            return h_func(tau_val)
-
-        support_x = (self.horiz_range[0], self.horiz_range[1])
-        support_h = (self.horiz_range[0], self.horiz_range[1])
-
-        for t_val in t_vals:
-            a = max(support_x[0], t_val - support_h[1])
-            b = min(support_x[1], t_val - support_h[0])
-            if a >= b:
-                y_vals.append(0)
-                continue
-            integrand = lambda tau_val: x_func_tau(tau_val) * h_func_tau_shifted(tau_val, t_val)
-            try:
-                val, _ = integrate.quad(integrand, a, b)
-            except Exception:
-                val = 0
-            y_vals.append(val)
-
-        self.func = lambda t_: np.interp(t_, t_vals, y_vals)
-        self.impulse_locs = []
-        self.impulse_areas = []
-
-    self.expr = None
-    self.t_vals = t_vals
-    self.xlabel = "t"
-    self.ylabel = r"y(t)"
-
-    self._setup_figure()
-    self.setup_axes()
-    self.draw_function()
-    self.draw_impulses()
-    self.draw_ticks()
-    self.draw_labels()
-    self.show()
-
-
-# def _get_signal_support(self, expr, var):
-#     import sympy as sp
-
-#     # Si la expresión es Piecewise: buscar condiciones
-#     if isinstance(expr, sp.Piecewise):
-#         intervals = []
-#         for (expr_i, cond) in expr.args:
-#             if cond == True:
-#                 continue
-#             if isinstance(cond, sp.And):
-#                 for c in cond.args:
-#                     if isinstance(c, sp.core.relational.Relational):
-#                         intervals.append(c)
-#             elif isinstance(cond, sp.core.relational.Relational):
-#                 intervals.append(cond)
-
-#         # Resolver condiciones simbólicamente
-#         vals = []
-#         for rel in intervals:
-#             try:
-#                 bound = sp.solve(rel, var)
-#                 vals.extend(bound)
-#             except Exception:
-#                 continue
-#         vals = [v.evalf() for v in vals if v.is_real]
-#         if vals:
-#             return (float(min(vals)), float(max(vals)))
-
-#     # Casos conocidos
-#     if expr.has(sp.Heaviside):
-#         return (-10, 10)  # estimación genérica
-
-#     if expr.has(sp.DiracDelta):
-#         deltas = expr.atoms(sp.DiracDelta)
-#         locs = []
-#         for d in deltas:
-#             arg = d.args[0]
-#             try:
-#                 loc = sp.solve(arg, var)
-#                 locs.extend(loc)
-#             except Exception:
-#                 continue
-#         if locs:
-#             return (float(min(locs)) - 0.1, float(max(locs)) + 0.1)
-
-#     if expr.has(sp.Function("rect")):
-#         return (-0.5, 0.5)
-#     if expr.has(sp.Function("tri")):
-#         return (-1, 1)
-
-#     # Por defecto: usar el rango de la figura
-#     return (self.horiz_range[0], self.horiz_range[1])
-
-
-
 
 # Asociar los métodos a la clase SignalPlotter
-setattr(SignalPlotter, "_setup_figure", _setup_figure)
-setattr(SignalPlotter, "_get_transformations", _get_transformations)
-# setattr(SignalPlotter, "_get_signal_support", _get_signal_support)
-setattr(SignalPlotter, "plot_convolution_view", plot_convolution_view)
-setattr(SignalPlotter, "plot_convolution_steps", plot_convolution_steps)
-setattr(SignalPlotter, "plot_convolution_result", plot_convolution_result)
+# setattr(SignalPlotter, "_setup_figure", _setup_figure)
+# setattr(SignalPlotter, "_get_transformations", _get_transformations)
+# etattr(SignalPlotter, "_get_signal_support", _get_signal_support)
+# setattr(SignalPlotter, "plot_convolution_view", plot_convolution_view)
+# setattr(SignalPlotter, "plot_convolution_steps", plot_convolution_steps)
+# setattr(SignalPlotter, "plot_convolution_result", plot_convolution_result)
 
 
 
