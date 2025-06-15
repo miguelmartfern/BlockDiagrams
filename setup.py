@@ -22,7 +22,9 @@ setup(
     ],
     python_requires='>=3.6',
     install_requires=[
-        'matplotlib>=3.0.0',
-        'numpy>=1.0.0',
+        'matplotlib>=3.5',
+        'numpy<1.25',
+        'scipy>=1.7',
+        'sympy>=1.10',
     ],
 )
