@@ -13,12 +13,47 @@ import warnings
 from scipy import integrate
 
 class SignalPlotter:
+    """
+    A helper class to plot signals y a minimalistic way. It has predefined
+    typical signals, like rect, tri, Heaviside, delta, sinc, ...
+    It allow to do operations with signals, like time shifts and inversions,
+    sums, products, convolutions, ...
+    
+    Args:
+        expr_str (str, optional): A string expression defining the signal, e.g. "x(t)=sin(t)*u(t)".
+        horiz_range (tuple, optional): Tuple (t_min, t_max) specifying the horizontal plotting range.
+        vert_range (tuple, optional): Tuple (y_min, y_max) specifying the vertical range. Auto-scaled if None.
+        period (float, optional): If provided, the signal is treated as periodic with this period.
+        num_points (int, optional): Number of points used to discretize the time axis.
+        figsize (tuple, optional): Size of the figure in centimeters (width, height).
+        tick_size_px (int, optional): Size of axis tick marks in pixels.
+        xticks (list or 'auto' or None): Positions of x-axis ticks. If 'auto', they are generated automatically.
+        yticks (list or 'auto' or None): Same for y-axis.
+        xtick_labels (list of str, optional): Labels for xticks. Must match xticks in length.
+        ytick_labels (list of str, optional): Labels for yticks. Must match yticks in length.
+        pi_mode (bool, optional): If True, x and y tick labels are shown as fractionary multiples of π if possible.
+        fraction_ticks (bool, optional): If True, tick labels are shown as rational fractions.
+        xticks_delta (float, optional): If provided, generates xticks at this interval (when xticks='auto').
+        yticks_delta (float, optional): Same for yticks.
+        save_path (str, optional): If provided, saves the plot to the given path instead of displaying.
+        show_plot (bool, optional): Whether to show the plot window (if False and save_path is given, it only saves).
+        color (str, optional): Color for the plot line and impulses.
+        alpha (float, optional): Transparency for background label boxes (between 0 and 1).
+
+    Examples:
+        >>> from blockdiagrams import SignalPlotter
+        >>> sp = SignalPlotter("x(t)=rect(t)", horiz_range=(-2, 2), pi_mode=True).plot()
+        >>> SignalPlotter("x(t)=delta(t/2-1) + 3*delta(t + 2)", color='blue', figsize=(8,4)).plot('x')
+        >>> signal1 = SignalPlotter("x(t)=cos(4 pi t)*tri(t/2)", alpha=0.7, horiz_range=[-3, 3], xticks=np.linspace(-2, 2, 9), color='blue', figsize=(12,4))
+        >>> signal1.plot()
+        >>> SignalPlotter("x(t)=pw((t**2, (t>-1) & (t<0)), (-t, (t>=0) & (t<1)), (0, True))", horiz_range=[-2.5, 2.5], xticks=np.linspace(-2, 2, 9), color='blue', period=2)
+    """
     def __init__(
         self,
         expr_str=None, 
         horiz_range=(-5, 5),
         vert_range=None,
-        periodo=None,
+        period=None,
         num_points=1000,
         figsize=(8, 3), 
         tick_size_px=5,
@@ -26,15 +61,18 @@ class SignalPlotter:
         yticks='auto',
         xtick_labels=None,
         ytick_labels=None,
+        xticks_delta=None,
+        yticks_delta=None,
         pi_mode=False,
         fraction_ticks=False,
         save_path=None, 
         show_plot=True,
         color='black', 
-        alpha=0.5, 
-        xticks_delta=None,
-        yticks_delta=None
+        alpha=0.5 
     ):
+        """
+        (Private) Creator of the SignalPlotter class.
+        """
         self.signal_defs = {}
         self.var_symbols = {}
         self.current_name = None
@@ -45,13 +83,13 @@ class SignalPlotter:
         self.tick_size_px = tick_size_px
         self.color = color
         self.alpha = alpha
-        self.periodo = periodo
+        self.period = period
         self.save_path = save_path
         self.show_plot = show_plot
 
         self.fraction_ticks = fraction_ticks
 
-        # Guardar argumento original para diferenciar None / [] / 'auto'
+        # Preserve original tick arguments to differentiate None / [] / 'auto'
         self.init_xticks_arg = xticks
         self.init_yticks_arg = yticks
 
@@ -83,12 +121,35 @@ class SignalPlotter:
         self.xticks_delta = xticks_delta
         self.yticks_delta = yticks_delta
 
-        self.expr_str_pending = expr_str  # Se inicializa más adelante
+        self.expr_str_pending = expr_str  # Expression to initialize later if plot() is called first
 
         self.transformations = (standard_transformations + (implicit_multiplication_application,))
 
 
     def _get_local_dict(self):
+        """
+        (Private) Returns a local dictionary of predefined symbols and functions used
+        during symbolic parsing and evaluation of signal expressions.
+
+        This includes:
+        - Common signal processing functions such as:
+            - u(t): Heaviside step (centered at 0.5)
+            - rect(t), tri(t), sinc(t), ramp(t), delta(t)
+        - Piecewise functions:
+            - Piecewise, pw
+        - Mathematical functions and constants:
+            - sin, cos, exp, pi, abs, arg, re, im, conj
+        - Symbols used in frequency/time analysis: t, ω, Ω, τ, λ
+        - Support for complex signals: i, j, re, im, conj, abs, arg 
+        - Previously defined signal names in the format "name(variable)"
+
+        Returns:
+            dict: A dictionary mapping names to SymPy expressions or functions.
+
+        Examples:
+            >>> local_dict = self._get_local_dict()
+            >>> expr = parse_expr("x(t) + rect(t)", local_dict=local_dict)
+        """
         d = {
             'u':            lambda t: sp.Heaviside(t, 0.5),
             'rect':         lambda t: sp.Piecewise((1, sp.And(t >= -0.5, t <= 0.5)), (0, True)),
@@ -104,11 +165,11 @@ class SignalPlotter:
             'exp':          sp.exp,
             'Piecewise':    sp.Piecewise,
             'pw':           sp.Piecewise,
-            're':           sp.re,            # Parte real
-            'im':           sp.im,            # Parte imaginaria
-            'conj':         sp.conjugate,    # Conjugado complejo
-            'abs':          lambda x: np.abs(x),           # Magnitud / módulo
-            'arg':          sp.arg,           # Argumento / fase
+            're':           sp.re,
+            'im':           sp.im,
+            'conj':         sp.conjugate,
+            'abs':          lambda x: np.abs(x),
+            'arg':          sp.arg,
             'i':            sp.I,
             'j':            sp.I,
             't':            sp.Symbol('t'),
@@ -123,47 +184,69 @@ class SignalPlotter:
                 d[f"{name}({var})"] = expr.subs(var, var)
         return d
 
-    def _initialize_expression(self, expr_str):
-        m = re.match(r"^(?P<fn>[^\W\d_]+)\((?P<vr>[^)]+)\)\s*=\s*(?P<ex>.+)$", expr_str)
-        if m:
-            self.func_name = m.group('fn')
-            var_name = m.group('vr')
-            expr_body = m.group('ex')
-        else:
-            self.func_name = 'x'
-            var_name = 't'
-            expr_body = expr_str
+    # def _initialize_expression(self, expr_str):
+    #     m = re.match(r"^(?P<fn>[^\W\d_]+)\((?P<vr>[^)]+)\)\s*=\s*(?P<ex>.+)$", expr_str)
+    #     if m:
+    #         self.func_name = m.group('fn')
+    #         var_name = m.group('vr')
+    #         expr_body = m.group('ex')
+    #     else:
+    #         self.func_name = 'x'
+    #         var_name = 't'
+    #         expr_body = expr_str
 
-        replacements = {'\\omega': 'ω', '\\tau': 'τ'}
-        for latex_var, unicode_var in replacements.items():
-            var_name = var_name.replace(latex_var, unicode_var)
-            expr_body = expr_body.replace(latex_var, unicode_var)
+    #     replacements = {'\\omega': 'ω', '\\tau': 'τ'}
+    #     for latex_var, unicode_var in replacements.items():
+    #         var_name = var_name.replace(latex_var, unicode_var)
+    #         expr_body = expr_body.replace(latex_var, unicode_var)
 
-        self.expr_str = expr_body
-        self.var = sp.Symbol(var_name)
-        self.xlabel = var_name
-        self.ylabel = self.func_name + '(' + var_name + ')'
+    #     self.expr_str = expr_body
+    #     self.var = sp.Symbol(var_name)
+    #     self.xlabel = var_name
+    #     self.ylabel = self.func_name + '(' + var_name + ')'
 
-        self.local_dict = self._get_local_dict()
+    #     self.local_dict = self._get_local_dict()
 
-        transformations = standard_transformations + (implicit_multiplication_application,)
-        self.expr = parse_expr(expr_body, local_dict=self.local_dict, transformations=transformations)
+    #     transformations = standard_transformations + (implicit_multiplication_application,)
+    #     self.expr = parse_expr(expr_body, local_dict=self.local_dict, transformations=transformations)
 
-        self.expr_cont = self._remove_dirac_terms()
-        self.impulse_locs, self.impulse_areas = self._extract_impulses()
+    #     self.expr_cont = self._remove_dirac_terms()
+    #     self.impulse_locs, self.impulse_areas = self._extract_impulses()
 
-        t0, t1 = self.horiz_range
-        self.t_vals = np.linspace(t0, t1, self.num_points)
-        if self.periodo is not None:
-            T = self.periodo
-            self.t_vals = ((self.t_vals + T/2) % T) - T/2
-            self.t_vals.sort()
+    #     t0, t1 = self.horiz_range
+    #     self.t_vals = np.linspace(t0, t1, self.num_points)
+    #     if self.period is not None:
+    #         T = self.period
+    #         self.t_vals = ((self.t_vals + T/2) % T) - T/2
+    #         self.t_vals.sort()
 
-        self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self.local_dict])
-        self.fig, self.ax = plt.subplots(figsize=self.figsize)
-        self._prepare_plot()
+    #     self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self.local_dict])
+    #     self.fig, self.ax = plt.subplots(figsize=self.figsize)
+    #     self._prepare_plot()
 
     def add_signal(self, expr_str, label=None, period=None):
+        """
+        Adds a new signal to the internal dictionary for later plotting.
+        - The expression is parsed symbolically using SymPy.
+        - If other signals are referenced, their definitions are recursively substituted.
+        - If `period` is set, the signal will be expanded as a sum of time-shifted versions over the full horizontal range.
+
+        Args:
+            expr_str (str): Signal definition in the form "name(var) = expression",
+        e.g. "x(t) = rect(t) + delta(t-1)". The expression may include previously defined signals.
+            label (str, optional): Custom label for the vertical axis when plotting this signal.
+            period (float, optional): If provided, the signal will be treated as periodic with this period.
+
+        Examples:
+            >>> sp = SignalPlotter(horiz_range=(-1, 1), fraction_ticks=True, figsize=(12, 4))
+            >>> sp.add_signal("x1(t) = tri(t)")
+            >>> sp.add_signal("x2(t) = delta(t)", period=0.2)
+            >>> sp.add_signal("x3(t) = x1(t) * (1 + x2(t))", label="x_3(t)")
+            >>> sp.plot("x3")
+            >>> sp.add_signal("x4(t) = exp((-2+j*8*pi)*t)*u(t)")
+            >>> sp.add_signal("x5(t) = re(x4(t))", label="\Re\{x_4(t)\}")
+            >>> sp.plot('x5')
+        """
         m = re.match(r"^(?P<fn>\w+)\((?P<vr>\w+)\)\s*=\s*(?P<ex>.+)$", expr_str)
 
         replacements = {'\\omega': 'ω', '\\tau': 'τ'}
@@ -208,12 +291,12 @@ class SignalPlotter:
                 self.signal_periods = {}
             self.signal_periods[name] = period
 
-            # Expandir la señal como suma de traslaciones dentro del rango
+            # Expand signal as sum of shifts within range
             horiz_min, horiz_max = self.horiz_range
             num_periods = int(np.ceil((horiz_max - horiz_min) / period))
             k_range = range(-num_periods - 2, num_periods + 3)  # márgenes extra
 
-            # expandido como suma de expresiones desplazadas (en SymPy)
+            # Expanded as sum of shifted expressions (in SymPy)
             expanded_expr = sum(parsed_expr.subs(var_sym, var_sym - period * k) for k in k_range)
 
             self.signal_defs[name] = expanded_expr
@@ -222,8 +305,30 @@ class SignalPlotter:
 
 
     def _prepare_plot(self):
+        """
+        (Private) Determines the vertical plotting range (y-axis limits) based on the signal values. 
+        Called from `plot()`.
+
+        This method:
+        - Evaluates the continuous part of the signal over `self.t_vals`.
+        - Identifies Dirac delta impulses located within the horizontal plotting range.
+        - Computes the minimum and maximum of both continuous and impulsive parts.
+        - Ensures a minimal vertical span to avoid flat-looking plots.
+        - Uses `self.vert_range` if explicitly provided.
+
+        Sets:
+        - self.y_min, self.y_max: Vertical limits for plotting.
+
+        Notes:
+        - If evaluation fails (e.g. undefined expression), defaults to [-1, 1].
+        - Delta impulses are included only if they fall within the horizontal range.
+
+        Examples:
+            >>> self._prepare_plot()
+            >>> print(self.y_min, self.y_max)  # → computed bounds
+        """
         try:
-            # Evaluar señal continua
+            # Evaluate continuous expression
             y_vals = self.func(self.t_vals)
             y_vals = np.array(y_vals, dtype=np.float64)
             y_vals = y_vals[np.isfinite(y_vals)]
@@ -235,7 +340,7 @@ class SignalPlotter:
                 cont_min = 0.0
                 cont_max = 0.0
            
-            # Impulsos visibles en el rango horizontal
+            # Visible deltas in hoirzontal range
             if self.impulse_locs and self.impulse_areas:
                 t_min, t_max = self.horiz_range
                 filtered_areas = [
@@ -254,13 +359,12 @@ class SignalPlotter:
                 overall_min = min(cont_min, 0.0)
                 overall_max = max(cont_max, 0.0)
 
-
-            # Ajuste si el rango es demasiado pequeño
+            # Fit in case range is too narrow
             if abs(overall_max - overall_min) < 1e-2:
                 overall_min -= 1.0
                 overall_max += 1.0
 
-            # Aplicar rango vertical explícito si se indicó
+            # Apply vertical range if provided
             if self.vert_range:
                 self.y_min, self.y_max = self.vert_range
             else:
@@ -270,12 +374,50 @@ class SignalPlotter:
             self.y_min, self.y_max = -1, 1
 
 
-
     def _eval_func_array(self, t):
+        """
+        (Private) Evaluates the continuous (non-impulsive) part of the signal at the given time values.
+        Notes:
+        - This method assumes `self.func` is a callable created with `lambdify(...)`.
+        - Ensures consistent array output for plotting, regardless of scalar/vector behavior.
+
+        Args:
+            t (array-like or scalar): Time values at which to evaluate the signal function.
+
+        Returns:
+            (Numpy.NDArray): A NumPy array of evaluated values with the same shape as `t`.
+            If the result is scalar (i.e., constant function), it is broadcast across all `t`.
+
+        Examples:
+            >>> t_vals = np.linspace(-1, 1, 100)
+            >>> y_vals = self._eval_func_array(t_vals)
+        """
         y = self.func(t)
         return np.full_like(t, y, dtype=float) if np.isscalar(y) else np.array(y, dtype=float)
 
     def _extract_impulses(self):
+        """
+        (Private) Extracts the locations and amplitudes of Dirac delta impulses from the signal expression.
+
+        This method:
+        - Expands the symbolic expression `self.expr` into additive terms.
+        - Identifies all DiracDelta terms and their arguments.
+        - Solves each delta argument for its root(s) to determine impulse location(s).
+        - Computes the effective amplitude of each impulse, accounting for time scaling:
+            For δ(a·t + b), amplitude is scaled by 1/|a|.
+        - Merges nearby impulses numerically (within a tolerance of 1e-8) to avoid duplicates.
+        - Ignores impulses with near-zero amplitude (threshold: 1e-6).
+
+        Returns:
+            impulse_locs (list of float): Time positions of Dirac delta impulses.
+            impulse_areas (list of float): Corresponding amplitudes (areas) of each impulse.
+
+        Example:
+            >>> self.expr = sp.DiracDelta(t - 1) + 2*sp.DiracDelta(2*t)
+            >>> locs, areas = self._extract_impulses()
+            >>> print(locs)   # → [1.0, 0.0]
+            >>> print(areas)  # → [1.0, 1.0]  (2*δ(2t) has area 1 due to 1/|2| scaling)
+        """
         impulse_map = {}
 
         # Expandir y descomponer en términos
@@ -322,13 +464,49 @@ class SignalPlotter:
 
 
     def _remove_dirac_terms(self):
+        """
+        Removes all Dirac delta (impulse) terms from the symbolic expression.
+
+        This method:
+        - Scans `self.expr` for any subexpressions containing `DiracDelta(...)`.
+        - Replaces each occurrence with 0, effectively isolating the continuous part
+        of the signal (excluding impulses).
+
+        Returns:
+            sympy.Expr: A new expression identical to `self.expr` but with all DiracDelta terms removed.
+
+        Example:
+            >>> self.expr = delta(t) + sp.sin(t)
+            >>> self._remove_dirac_terms()
+            sin(t)
+        """
         return self.expr.replace(lambda expr: expr.has(sp.DiracDelta), lambda _: 0)
+
 
     def draw_function(self, horiz_range=None):
         """
-        Dibuja la señal continua sin asumir periodicidad.
-        Añade puntos suspensivos si hay valores significativos fuera del rango,
-        o siempre si la señal fue definida como periódica.
+        Plots the continuous part of the signal over the specified horizontal range.
+        This method is typically called after `setup_axes()`.
+        This method is usually called internally from `plot()`, but can also be used manually.
+
+        This method:
+        - Evaluates the function defined in `self.func` across `self.t_vals`.
+        - Plots the result as a smooth curve using the configured color and linewidth.
+        - Automatically detects and adds ellipsis ("⋯") on the left/right ends if:
+            - The signal is marked as periodic, or
+            - Significant energy exists just outside the plotting range.
+
+        Notes:
+        - This method does not draw delta impulses. Use `draw_impulses()` for that.
+        - Ellipsis are drawn at 5% beyond the plot edges when appropriate.
+
+        Args:
+            horiz_range (tuple, optional): Tuple (t_min, t_max) to override the default horizontal range.
+            If None, uses `self.horiz_range`.
+
+        Examples:
+            >>> self.draw_function()
+            >>> self.draw_impulses()  # to add deltas on top of the curve
         """
 
         if horiz_range is None:
@@ -338,22 +516,22 @@ class SignalPlotter:
         t_plot = self.t_vals
         y_plot = self._eval_func_array(t_plot)
 
-        # Asegurar arrays y formato
+        # Assure arrays and format
         t_plot = np.array(t_plot)
         y_plot = np.array(y_plot)
         if y_plot.ndim == 0:
             y_plot = np.full_like(t_plot, y_plot, dtype=float)
 
-        # Dibujar curva
+        # Plot curve
         self.ax.plot(t_plot, y_plot, color=self.color, linewidth=2.5, zorder=5)
 
-        # Decidir puntos suspensivos
+        # Decide whether to draw ellipsis
         delta = (t1 - t0) * 0.05
         tol = 1e-3
         span = t1 - t0
         draw_left = draw_right = False
 
-        # Mostrar siempre si la señal es periódica
+        # Show alwais if periodic
         if hasattr(self, 'signal_periods') and self.current_name in self.signal_periods:
             draw_left = draw_right = True
         else:
@@ -368,7 +546,7 @@ class SignalPlotter:
             if np.trapz(ys_right, xs_right) > tol:
                 draw_right = True
 
-        # Dibujar puntos suspensivos
+        # Draw ellipsis if needed
         y_mid = (self.y_min + 2 * self.y_max) / 3
         if draw_left:
             self.ax.text(t0 - delta, y_mid, r'$\cdots$', ha='left', va='center',
@@ -380,8 +558,24 @@ class SignalPlotter:
 
     def draw_impulses(self):
         """
-        Dibuja los impulsos (Dirac) en las ubicaciones extraídas de la expresión.
-        No asume periodicidad.
+        Draws Dirac delta impulses at the extracted positions and amplitudes.
+        This method is typically called after `draw_functions()`.
+        This method is usually called internally from `plot()`, but can also be used manually.
+
+        This method:
+        - Iterates over the list of impulse locations (`self.impulse_locs`)
+        and their corresponding amplitudes (`self.impulse_areas`).
+        - Calls `_draw_single_impulse()` for each impulse located within
+        the current horizontal plotting range (`self.horiz_range`).
+
+        Notes:
+        - This method only draws impulses that are visible within the plotting window.
+        - Periodicity is not assumed. Use `add_signal(..., period=...)` to manually expand periodic impulses.
+        - The drawing includes both a vertical arrow and a bold label showing the impulse area.
+
+        Examples:
+            >>> self.draw_function()
+            >>> self.draw_impulses()
         """
         t_min, t_max = self.horiz_range
         for t0, amp in zip(self.impulse_locs, self.impulse_areas):
@@ -390,11 +584,26 @@ class SignalPlotter:
 
     def _draw_single_impulse(self, t0, amp):
         """
-        Dibuja un único impulso en t0 con amplitud amp.
-        Si t0 está cerca de 0, desplaza la etiqueta ligeramente a la izquierda
-        para que no quede sobre el eje vertical.
+        Draws a single Dirac delta impulse at the specified location and amplitude.
+
+        This method:
+        - Draws a vertical arrow starting from (t0, 0) up to (t0, amp).
+        - Places a bold numerical label near the tip of the arrow indicating the amplitude.
+        - Slightly offsets the label horizontally if the impulse is located at or near t = 0,
+        to avoid overlapping with the vertical axis.
+
+        Notes:
+        - Arrow and label use the color specified in `self.color`.
+        - Label placement is adjusted to avoid axis clutter at t = 0.
+
+        Args:
+            t0 (float): The location of the impulse along the time axis.
+            amp (float): The area of the impulse. Determines arrow height and label.
+
+        Examples:
+            >>> self._draw_single_impulse(1.0, 2.5)  # draws 2.5·δ(t − 1)
         """
-        # Flecha desde (t0,0) hasta (t0, amp)
+        # Arrow from (t0,0) to (t0, amp)
         self.ax.annotate(
             '', xy=(t0, amp + 0.01 * (self.y_max - self.y_min)), xytext=(t0, 0),
             arrowprops=dict(
@@ -406,20 +615,20 @@ class SignalPlotter:
             zorder=10
         )
 
-        # Calcular desplazamiento horizontal de la etiqueta si t0 ≈ 0
+        # Calculate horizontal offset for the label if t0 ≈ 0
         x_min, x_max = self.ax.get_xlim()
         x_range = x_max - x_min
-        # Umbral para considerar que t0 es “casi” cero:
+        # Threshold to consider that t0 is 'almost' zero
         tol = 1e-6 * max(1.0, abs(x_range))
         if abs(t0) < tol:
-            # Desplazar la etiqueta un 2% del rango horizontal hacia la izquierda
+            # Shift label a 2% of horizontal range to the left
             x_offset = -0.01 * x_range
             ha = 'right'
         else:
             x_offset = 0.0
             ha = 'center'
 
-        # Alinear etiqueta más arriba de la curva continua si es necesario
+        # Algin label above continuous curve if necessary
         arrow_headroom = 0.05 * (self.y_max - self.y_min)
         x_text = t0 + x_offset
         y_text = amp + arrow_headroom
@@ -437,27 +646,55 @@ class SignalPlotter:
 
 
     def setup_axes(self, horiz_range=None):
+        """
+        Configures the plot axes: hides borders, sets limits, and draws arrow-like axes.
+        This method is typically called after `_prepare_plot()` to finalize the plot appearance.
+        This method is usually called internally from `plot()`, but can also be used manually.
+
+        This method:
+        - Hides the default box (spines) around the plot.
+        - Clears all default ticks.
+        - Sets the horizontal and vertical limits based on the signal range.
+        - Adds margin space around the plotted data to improve visual clarity.
+        - Draws custom x- and y-axis arrows using `annotate`.
+        - Calls `tight_layout()` to prevent label clipping.
+
+        Notes:
+        - The horizontal axis includes a 20% margin on both sides.
+        - The vertical axis includes 30% below and 60% above the data range.
+        - The vertical range must be computed beforehand via `_prepare_plot()`.
+
+        Args:
+            horiz_range (tuple, optional): If provided, overrides the default horizontal range.
+
+        Examples:
+            >>> self._prepare_plot()
+            >>> self.setup_axes()
+        """
+        # Hide all axis spines (borders)
         for spine in self.ax.spines.values():
             spine.set_color('none')
 
+        # Remove default ticks
         self.ax.set_xticks([])
         self.ax.set_yticks([])
         
         if horiz_range is None:
             horiz_range = self.horiz_range
 
-        # Rango horizontal
+        # Compute horizontal range and margin
         x0, x1 = horiz_range
         x_range = x1 - x0
-        x_margin = 0.2 * x_range  # puedes ajustar si quieres cambiar la extensión horizontal
+        # You can adjust this value if needed
+        x_margin = 0.2 * x_range
 
-        # Rango vertical original calculado en _prepare_plot: self.y_min, self.y_max
+        # Use vertical range computed in _prepare_plot
         y_min, y_max = self.y_min, self.y_max
         y_range = y_max - y_min
 
-        # Extensión de un 10% adicional por cada lado => total 1.2×
+        # Add a 30% margin below and 60% margin above the signal range
         if y_range <= 0:
-            # En caso degenerate, mantener un rango mínimo
+            # In degenerate cases, ensure a minimum visible height
             y_margin = 1.0
         else:
             y_margin = 0.3 * y_range
@@ -465,14 +702,17 @@ class SignalPlotter:
         self.ax.set_xlim(horiz_range[0] - x_margin, horiz_range[1] + x_margin)
         self.ax.set_ylim(self.y_min - y_margin, self.y_max + 1.6 * y_margin)
 
+        # Draw x-axis arrow
         self.ax.annotate('', xy=(self.ax.get_xlim()[1], 0), xytext=(self.ax.get_xlim()[0], 0),
                          arrowprops=dict(arrowstyle='-|>', linewidth=1.5, color='black',
                                          mutation_scale=16, mutation_aspect=0.8, fc='black'))
 
+        # Draw x-axis arrow
         self.ax.annotate('', xy=(0, self.ax.get_ylim()[1]), xytext=(0, self.ax.get_ylim()[0]),
                          arrowprops=dict(arrowstyle='-|>', linewidth=1.5, color='black',
                                          mutation_scale=12, mutation_aspect=2, fc='black'))
         
+        # Prevent labels from being clipped
         self.fig.tight_layout()
 
     def draw_ticks(self,
@@ -482,82 +722,61 @@ class SignalPlotter:
                 xtick_labels='auto',
                 ytick_labels='auto'):
         """
-        Draws tick marks and labels on the x and y axes, according to the current configuration.
-
-        Supported behaviors:
-
-        X AXIS (xticks):
-
-        - `xticks=None`:
-            Only the positions of delta impulses (if any) are shown.
-
-        - `xticks='auto'`:
-            Ticks are generated automatically:
-                - If `xticks` were set during initialization, they are used.
-                - Otherwise, ticks are placed evenly across the horizontal range.
-                If `xticks_delta` is provided, ticks are placed every that interval from the origin (both positive and negative).
-                Additional ticks at delta locations are added if not already present (according to tolerance `tol`).
-
-        - `xticks=[... list of positions ...]`:
-            These positions are used as manual ticks. If `xtick_labels` is provided, those are used as labels;
-            otherwise, labels are generated automatically.
-
-        X-axis tick labels:
-        - If `pi_mode=True`, ticks are shown as multiples of π (e.g., `-\\pi/2`, `3\\pi/4`, `0`, etc.).
-        - If `fraction_ticks=True` and `pi_mode=False`, ticks are formatted as rational fractions (e.g., `1/2`, `-3/4`).
-        - If both are active, labels appear as rational multiples of π (e.g., `-\\pi/2`, `3\\pi/4`).
-        - If neither is active, simple decimal labels are used (`1.5`, `-2`, etc.).
-        - Manual labels (via `xtick_labels`) always take precedence.
-
-        Warning:
-        - If `xticks_delta` is provided and `xticks` is not `'auto'`, a `UserWarning` is issued to indicate it will be ignored.
-
-        Y AXIS (yticks):
-
-        - `yticks=None`:
-            No ticks are shown on the y-axis.
-
-        - `yticks='auto'`:
-            Ticks are generated automatically:
-                - If `yticks` were set during initialization, they are used.
-                - Otherwise, 3 evenly spaced ticks are placed within the vertical bounds.
-                If `yticks_delta` is provided, ticks are placed every that interval from the origin (positive and negative).
-
-        - `yticks=[... list of positions ...]`:
-            These positions are used as manual ticks. If `ytick_labels` is provided, those are used as labels;
-            otherwise, labels are generated automatically.
-
-        Y-axis tick labels:
-        - If `fraction_ticks=True`, ticks are shown as rational fractions (`1/2`, `-3/4`, etc.).
-        - If not, simple decimal labels are used (`0.2`, `1`, etc.).
-        - Manual labels (via `ytick_labels`) always take precedence.
-
-        Warning:
-        - If `yticks_delta` is provided and `yticks` is not `'auto'`, a `UserWarning` is issued to indicate it will be ignored.
+        Draws tick marks and labels on both x- and y-axes, using automatic or manual configurations.
+        This method is typically called after `draw_impulses()`.
+        This method is usually called internally from `plot()`, but can also be used manually.
+        
+        Features:
+        - Adds tick marks and LaTeX-formatted labels.
+        - Integrates impulse positions into xticks automatically, unless explicitly overridden.
+        - Supports:
+            - `pi_mode`: labels as multiples of π.
+            - `fraction_ticks`: labels as rational fractions.
+            - Hiding y=0 label if x=0 tick is shown (to avoid overlapping at the origin).
+        - Avoids duplicate tick values based on numerical tolerance.
 
         Notes:
-        - All automatically generated labels avoid near-duplicates using the `tol` parameter.
-        - Returned ticks are sorted and cleaned of redundant values.
+        - If `xticks_delta` or `yticks_delta` are provided (in constructor), evenly spaced ticks are placed at multiples.
+        - If custom labels are passed and their count does not match the tick list, raises ValueError.
+        - Labels are drawn on white rounded boxes for visibility over plots.
+
+        Args:
+            tick_size_px (int, optional): Length of tick marks in pixels. If None, uses self.tick_size_px.
+            xticks (list or 'auto' or None): X-axis tick positions.
+                - 'auto': automatically computed ticks (even spacing or using xticks_delta).
+                - list: manually specified tick positions.
+                - None: ticks are shown only at Dirac impulse positions.
+            yticks (list or 'auto' or None): Y-axis tick positions.
+                - Same behavior as `xticks`.
+            xtick_labels (list or 'auto' or None): Custom labels for xticks (must match length of xticks).
+            ytick_labels (list or 'auto' or None): Same for yticks.
+
+        Examples:
+            >>> self.draw_ticks(xticks='auto', yticks=[-1, 0, 1], ytick_labels=['-1', '0', '1'])
         """
 
+        # Helper: filter duplicate values with tolerance
         def unique_sorted(values, tol):
             unique = []
             for v in values:
                 if not any(abs(v - u) <= tol for u in unique):
                     unique.append(v)
             return sorted(unique)
-
+        
+        # Helper: get impulse locations and amplitudes within range (with periodic extension if needed)
         def get_impulse_positions_and_areas(t_min, t_max, tol):
             impulse_positions = []
             impulse_positions_areas = []
             if self.impulse_locs:
-                if self.periodo is None:
+                if self.period is None:
+                    # Non-periodic case: keep impulses in visible range
                     for base_loc, base_area in zip(self.impulse_locs, self.impulse_areas):
                         if t_min - tol <= base_loc <= t_max + tol:
                             impulse_positions.append(base_loc)
                             impulse_positions_areas.append(base_area)
                 else:
-                    T = self.periodo
+                    # Periodic case: replicate impulses across periods
+                    T = self.period
                     for base_loc, base_area in zip(self.impulse_locs, self.impulse_areas):
                         k_min = int(np.floor((t_min - base_loc) / T))
                         k_max = int(np.ceil((t_max - base_loc) / T))
@@ -566,7 +785,7 @@ class SignalPlotter:
                             if t_min - tol <= t_k <= t_max + tol:
                                 impulse_positions.append(t_k)
                                 impulse_positions_areas.append(base_area)
-            # eliminar duplicados
+            # Eliminate duplicates within tolerance
             unique_pos = []
             unique_area = []
             for loc, area in zip(impulse_positions, impulse_positions_areas):
@@ -581,6 +800,7 @@ class SignalPlotter:
                 impulse_positions, impulse_positions_areas = [], []
             return impulse_positions, impulse_positions_areas
 
+        # Helper: validate tick list
         def has_valid_ticks(ticks):
             if ticks is None:
                 return False
@@ -590,6 +810,7 @@ class SignalPlotter:
             except Exception:
                 return False
 
+        # Helper: generate xticks and labels
         def generate_xticks(effective_xticks, impulse_positions, tol, t_min, t_max):
             raw_xticks = []
             manual_xticks = []
@@ -603,7 +824,7 @@ class SignalPlotter:
                     raw_xticks = list(self.xticks)
                     if self.xtick_labels is not None:
                         if len(self.xticks) != len(self.xtick_labels):
-                            raise ValueError("xtick_labels y xticks de init deben tener la misma longitud")
+                            raise ValueError("xtick_labels and xticks from init must have the same length")
                         manual_xticks = list(self.xticks)
                         manual_xlabels = list(self.xtick_labels)
                 else:
@@ -615,23 +836,23 @@ class SignalPlotter:
                         base_ticks = list(np.linspace(t_min, t_max, 5))
                     raw_xticks = base_ticks.copy()
 
-                # Añadir impulsos
+                # Add impulses
                 for loc in impulse_positions:
                     if t_min - tol <= loc <= t_max + tol and not any(abs(loc - x0) <= tol for x0 in raw_xticks):
                         raw_xticks.append(loc)
 
             else:
                 if xticks_delta is not None:
-                    warnings.warn("xticks_delta será ignorado porque xticks no está en modo 'auto'.", stacklevel=2)
+                    warnings.warn("xticks_delta will be ignored because xticks not in 'auto' mode", stacklevel=2)
                 raw_xticks = list(effective_xticks)
                 if xtick_labels not in (None, 'auto'):
                     if len(raw_xticks) != len(xtick_labels):
-                        raise ValueError("xtick_labels y xticks deben tener la misma longitud")
+                        raise ValueError("xtick_labels and xticks must have the same length")
                     manual_xticks = list(raw_xticks)
                     manual_xlabels = list(xtick_labels)
                 elif self.xtick_labels is not None:
                     if len(raw_xticks) != len(self.xtick_labels):
-                        raise ValueError("xtick_labels y xticks deben tener la misma longitud (init)")
+                        raise ValueError("xtick_labels and xticks from init must have the same length")
                     manual_xticks = list(raw_xticks)
                     manual_xlabels = list(self.xtick_labels)
 
@@ -641,7 +862,7 @@ class SignalPlotter:
 
             raw_xticks = unique_sorted(raw_xticks, tol)
 
-            # Generar etiquetas
+            # Gnerate labels
             xlabels = []
             for x in raw_xticks:
                 label = None
@@ -680,7 +901,7 @@ class SignalPlotter:
 
             return raw_xticks, xlabels
 
-
+        # Helper: generate yticks and labels
         def generate_yticks(effective_yticks, tol):
             raw_yticks = []
             manual_yticks = []
@@ -697,11 +918,11 @@ class SignalPlotter:
                     raw_yticks = list(self.yticks)
                     if self.ytick_labels is not None:
                         if len(self.yticks) != len(self.ytick_labels):
-                            raise ValueError("ytick_labels y yticks de init deben tener la misma longitud")
+                            raise ValueError("ytick_labels and yticks from init must have the same length")
                         manual_yticks = list(self.yticks)
                         manual_ylabels = list(self.ytick_labels)
                     if ydelta is not None:
-                        warnings.warn("yticks_delta ignorado porque ya se especificaron yticks en el init")
+                        warnings.warn("yticks_delta ignored because yticks where specified at init")
                 else:
                     if ydelta is not None and ydelta > 0:
                         y_start = np.ceil(self.y_min / ydelta)
@@ -717,16 +938,16 @@ class SignalPlotter:
             else:
                 raw_yticks = list(effective_yticks)
                 if ydelta is not None:
-                    warnings.warn("yticks_delta ignorado porque yticks no está en modo 'auto'")
+                    warnings.warn("yticks_delta ignored because yticks is not in 'auto' mode")
 
                 if ytick_labels not in (None, 'auto'):
                     if len(raw_yticks) != len(ytick_labels):
-                        raise ValueError("ytick_labels y yticks deben tener la misma longitud")
+                        raise ValueError("ytick_labels and yticks must have the same length")
                     manual_yticks = list(raw_yticks)
                     manual_ylabels = list(ytick_labels)
                 elif self.ytick_labels is not None:
                     if len(raw_yticks) != len(self.ytick_labels):
-                        raise ValueError("ytick_labels y yticks deben tener la misma longitud (init)")
+                        raise ValueError("ytick_labels and yticks from init must have the same length")
                     manual_yticks = list(raw_yticks)
                     manual_ylabels = list(self.ytick_labels)
 
@@ -770,6 +991,7 @@ class SignalPlotter:
 
             return raw_yticks, ylabels
         
+        # Helper: hide y=0 label if x=0 tick exists
         def filter_yticks(raw_yticks, ylabels, raw_xticks, tol):
             has_xtick_zero = any(abs(x) <= tol for x in raw_xticks)
             if has_xtick_zero:
@@ -784,6 +1006,7 @@ class SignalPlotter:
             else:
                 return raw_yticks, ylabels
 
+        # Helper: convert pixel length to data coordinates
         def px_to_data_length(tick_px):
             origin_disp = self.ax.transData.transform((0, 0))
             up_disp = origin_disp + np.array([0, tick_px])
@@ -795,6 +1018,7 @@ class SignalPlotter:
             dx = right_data[0] - origin_data[0]
             return dx, dy
 
+        # Helper: draw xticks and labels
         def draw_xticks(raw_xticks, xlabels, impulse_positions, impulse_positions_areas, dx, dy, tol):
             xlim = self.ax.get_xlim()
             for x, lbl in zip(raw_xticks, xlabels):
@@ -815,6 +1039,7 @@ class SignalPlotter:
                                     bbox=dict(boxstyle='round,pad=0.1', facecolor='white',
                                             edgecolor='none', alpha=self.alpha))
 
+        # Helper: draw yticks and labels
         def draw_yticks(raw_yticks, ylabels, dx, dy):
             ylim = self.ax.get_ylim()
             for y, lbl in zip(raw_yticks, ylabels):
@@ -828,56 +1053,96 @@ class SignalPlotter:
                                     bbox=dict(boxstyle='round,pad=0.1', facecolor='white',
                                             edgecolor='none', alpha=self.alpha))
 
-        # -- Código principal draw_ticks --
+         # === MAIN LOGIC ===
 
-        # 0. Determinar effective ticks
+        # 0. Use constructor defaults if nothing passed explicitly
         effective_xticks = xticks if xticks is not None else getattr(self, 'init_xticks_arg', None)
         effective_yticks = yticks if yticks is not None else getattr(self, 'init_yticks_arg', None)
 
-        # 1. Tamaño del tick en px
+        # 1. Determine tick size in pixels
         tick_px = tick_size_px if tick_size_px is not None else self.tick_size_px
 
-        # 2. Rango y tolerancia
+        # 2. Get plotting range and numeric tolerance
         t_min, t_max = self.horiz_range
         tol = 1e-8 * max(1.0, abs(t_max - t_min))
 
-        # 3. Impulsos periódicos
+        # 3. Get impulse positions in the current range
         impulse_positions, impulse_positions_areas = get_impulse_positions_and_areas(t_min, t_max, tol)
 
-        # 4 y 5. Procesar ticks X + etiquetas
+        # 4. Generate x ticks and labels
         raw_xticks, xlabels = generate_xticks(effective_xticks, impulse_positions, tol, t_min, t_max)
 
-        # 6 y 7. Procesar ticks Y + etiquetas
+        # 5. Generate y ticks and labels
         raw_yticks, ylabels = generate_yticks(effective_yticks, tol)
 
-        # 8. Filtrar ytick=0 si xtick=0 existe
+        # 6. Remove y=0 label if x=0 tick exists
         raw_yticks, ylabels = filter_yticks(raw_yticks, ylabels, raw_xticks, tol)
 
-        # 9. Conversión px -> datos
+        # 7. Convert tick length in px to data coordinates
         dx, dy = px_to_data_length(tick_px)
 
-        # 10 Dibujar marcas xticks + etiquetas
+        # 8. Draw x-axis ticks and labels
         draw_xticks(raw_xticks, xlabels, impulse_positions, impulse_positions_areas, dx, dy, tol)
 
-        # 11. Dibujar marcas yticks + etiquetas
+        # 9. Draw y-axis ticks and labels
         draw_yticks(raw_yticks, ylabels, dx, dy)
 
 
     def draw_labels(self):
+        """
+        Adds axis labels to the x and y axes using the current signal variable and name.
+        This method is typically called after `draw_ticks()`.
+        This method is usually called internally from `plot()`, but can also be used manually.
+
+        This method:
+        - Retrieves the current axis limits.
+        - Places the x-axis label slightly to the right of the horizontal axis arrow.
+        - Places the y-axis label slightly below the top of the vertical axis arrow.
+        - Uses LaTeX formatting for the labels (e.g., "x(t)", "y(\\tau)", etc.).
+        - The labels use the values of `self.xlabel` and `self.ylabel`.
+
+        Notes:
+        - This method is called automatically in `plot()` after drawing ticks and arrows.
+        - Rotation for y-axis label is disabled to keep it horizontal.
+
+        Examples:
+            >>> self.draw_labels()
+        """
+        # Get the current x and y axis limits
         x_lim = self.ax.get_xlim()
         y_lim = self.ax.get_ylim()
 
-        # Etiqueta eje X: un poco a la derecha del límite derecho del eje x
+        # X-axis label: slightly to the right of the rightmost x limit
         x_pos = x_lim[1] - 0.01 * (x_lim[1] - x_lim[0])
         y_pos = 0.02 * (y_lim[1] - y_lim[0])
         self.ax.text(x_pos, y_pos, rf'${self.xlabel}$', fontsize=16, ha='right', va='bottom')
 
-        # Etiqueta eje Y: un poco por debajo del límite superior del eje y (pero dentro)
+        # Y-axis label: slightly below the top y limit (still inside the figure)
         x_pos = 0.01 * (x_lim[1] - x_lim[0])
         y_pos = y_lim[1] - 0.1 * (y_lim[1] - y_lim[0])
         self.ax.text(x_pos, y_pos, rf'${self.ylabel}$', fontsize=16, ha='left', va='bottom', rotation=0)
 
     def show(self):
+        """
+        Displays or saves the final plot, depending on configuration.
+        This method is typically called after `draw_labels()`.
+        This method is usually called internally from `plot()`, but can also be used manually.
+
+        This method:
+        - Disables the background grid.
+        - Applies tight layout to reduce unnecessary whitespace.
+        - If `self.save_path` is set, saves the figure to the given file (PNG, PDF, etc.).
+        - If `self.show_plot` is True, opens a plot window (interactive view).
+        - Finally, closes the figure to free up memory (especially important in batch plotting).
+
+        Notes:
+        - `self.save_path` and `self.show_plot` are set in the constructor.
+        - If both are enabled, the plot is shown and saved.
+        - The output file format is inferred from the file extension.
+
+        Examples:
+            >>> self.show()  # Typically called at the end of plot()
+        """
         self.ax.grid(False)
         plt.tight_layout()
         if self.save_path:
@@ -888,47 +1153,80 @@ class SignalPlotter:
 
 
     def plot(self, name=None):
-        # Procesar expr_str_pending si existe, es una cadena y aún no se ha inicializado
+        """
+        Plots the signal specified by name (or the default if defined via expr_str in constructor).
+
+        This method:
+        - Initializes the expression from `expr_str_pending` (if any), only once.
+        - Looks up the signal in the internal dictionary (`self.signal_defs`) using its name.
+        - Sets up symbolic and numeric representations of the signal.
+        - Removes DiracDelta terms from the continuous part.
+        - Extracts impulses and prepares data for plotting.
+        - Calls the full sequence: axis setup, function drawing, impulses, ticks, labels, and final display/save.
+
+        Args:
+            name (str, optional): Name of the signal to plot, e.g., "x1". If None and `expr_str` was given at init,
+        it uses the last-added expression.
+
+        Raises:
+            ValueError: If the signal is not defined or its variable cannot be determined.
+
+        Examples:
+            >>> SignalPlotter("x(t)=rect(t-1)").plot()
+            >>> sp1 = SignalPlotter("x(t)=rect(t-1)", period=2)
+            >>> sp1.plot("x")
+            >>> sp2 = SignalPlotter()
+            >>> sp2.add_signal("x(t) = rect(t)")
+            >>> sp2.plot("x")
+        """
+        # Initialize from expr_str (only once), if provided at construction
         if (hasattr(self, 'expr_str_pending') and 
             self.expr_str_pending is not None and 
             isinstance(self.expr_str_pending, str) and 
             not getattr(self, '_initialized_from_expr', False)):
             expr_str = self.expr_str_pending
             self._initialized_from_expr = True
-            self.add_signal(expr_str, period=self.periodo)
+            self.add_signal(expr_str, period=self.period)
             name = list(self.signal_defs.keys())[-1]
 
         if name:
             if name not in self.signal_defs:
-                raise ValueError(f"Señal '{name}' no definida")
+                raise ValueError(f"Signal '{name}' is not defined.")
             self.current_name = name
             self.func_name = name
             self.expr = self.signal_defs[name]
 
-            # Determinar la variable independiente
+            # Determine the independent variable (t, τ, ω, etc.)
             free_vars = list(self.expr.free_symbols)
             if free_vars:
                 self.var = free_vars[0]
             elif name in self.var_symbols:
                 self.var = self.var_symbols[name]
             else:
-                raise ValueError(f"No se pudo determinar la variable independiente para la señal '{name}'")
+                raise ValueError(f"Could not determine the variable for signal '{name}.'")
 
-            # Asignar etiquetas para los ejes
+            # Axis label setup
             self.xlabel = str(self.var)
             self.ylabel = f"{self.func_name}({self.xlabel})"
             if hasattr(self, 'custom_labels') and self.func_name in self.custom_labels:
                 self.ylabel = self.custom_labels[self.func_name]
 
-            # Preparar señal continua e impulsos
+            # Prepare expression: remove impulses and extract them separately
             self.expr_cont = self._remove_dirac_terms()
             self.impulse_locs, self.impulse_areas = self._extract_impulses()
+
+            # Re-lambdify the continuous function
             self.var = next(iter(self.var_symbols.values()))
             self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self._get_local_dict()])
+
+            # Time discretization for plotting
             self.t_vals = np.linspace(*self.horiz_range, self.num_points)
+
+            # Create figure and prepare vertical range
             self.fig, self.ax = plt.subplots(figsize=self.figsize)
             self._prepare_plot()
 
+        # Draw all components of the plot
         self.setup_axes()
         self.draw_function()
         self.draw_impulses()
@@ -940,19 +1238,66 @@ class SignalPlotter:
         self.show()
 
     # Definir las transformaciones a nivel global para uso posterior
-    def _get_transformations(self):
-        return self.transformations
+    # def _get_transformations(self):
+    #     return self.transformations
+
+    ## Convolution-specific methods
 
     def _setup_figure(self):
+        """
+        Initializes the Matplotlib figure and axes for plotting.
+
+        This method:
+        - Creates a new figure and axis using the configured `figsize`.
+        - Calls `_prepare_plot()` to compute vertical bounds for plotting based on the signal.
+        - Applies padding to the layout using `subplots_adjust` to avoid clipping of labels and arrows.
+
+        Notes:
+        - This method is typically used in convolution plotting routines where a clean figure is needed.
+        - For standard plotting, `plot()` uses its own setup sequence and may not rely on this method.
+
+        Examples:
+            >>> self._setup_figure()
+            >>> self.draw_function()
+            >>> self.show()
+        """
         self.fig, self.ax = plt.subplots(figsize=self.figsize)
         self._prepare_plot()
         self.fig.subplots_adjust(right=0.9, top=0.85, bottom=0.15)
 
     def plot_convolution_view(self, expr_str, t_val, label=None, tau=None, t=None):
+        """
+        Plots an intermediate signal in the convolution process, such as x(t−τ), h(τ+t), etc.
+
+        This method:
+        - Substitutes the convolution variable t with a fixed value `t_val` in a symbolic expression.
+        - Evaluates the resulting signal in terms of τ.
+        - Optionally adjusts x-axis direction and labels if the expression has a form like (t − τ) or (t + τ).
+        - Automatically handles periodic xtick reversal or shift based on convolution expression.
+        - Renders the function using existing plot methods (function, impulses, ticks, etc.).
+
+        Args:
+            expr_str (str): A symbolic expression involving τ and t, e.g. "x(t - tau)" or "h(t + tau)".
+                        The base signal must already be defined with `add_signal(...)`.
+            t_val (float): The value of the time variable `t` at which the expression is evaluated.
+            label (str, optional): Custom y-axis label to display (default is derived from the expression).
+            tau (sympy.Symbol or str, optional): Symbol to use as integration variable (default: 'tau').
+            t (sympy.Symbol or str, optional): Symbol used in shifting (default: 't').
+
+        Raises:
+            ValueError: If the base signal is not defined or the expression format is invalid.
+
+        Examples:
+            >>> sp = SignalPlotter(xticks=[-1, 0, 3], num_points=200, fraction_ticks=True)
+            >>> sp.add_signal("x(t)=exp(-2t)*u(t)")
+            >>> sp.add_signal("h(t)=u(t)")
+            >>> sp.plot_convolution_view("x(t - tau)", t_val=1)
+            >>> sp.plot_convolution_view("h(t + tau)", t_val=2, tau='lambda', t='omega')
+        """
         import re
         local_dict = self._get_local_dict()
 
-        # Definir variables simbólicas con nombres personalizados o por defecto
+        # Define symbolic variables for τ and t, either from arguments or defaults
         if tau is None:
             tau = local_dict.get('tau')
         elif isinstance(tau, str):
@@ -964,20 +1309,21 @@ class SignalPlotter:
 
         local_dict.update({'tau': tau, 't': t, str(tau): tau, str(t): t})
 
-        # Identificar el nombre de la señal
+         # Extract the base signal name from the expression (e.g., 'x' from 'x(t-tau)')
         if "(" in expr_str:
             name = expr_str.split("(")[0].strip()
             if name not in self.signal_defs:
-                raise ValueError(f"La señal '{name}' no está definida.")
+                raise ValueError(f"Signal '{name}' is not defined.")
             expr_base = self.signal_defs[name]
             var_base = self.var_symbols.get(name, t)
         else:
-            raise ValueError("Expresión inválida: se esperaba algo como 'x(t-tau)'.")
+            raise ValueError("Invalid expression: expected something like 'x(t - tau)'.")
 
+        # Parse the inner part of the expression (e.g., 't - tau')
         parsed_expr = parse_expr(expr_str.replace(name, "", 1), local_dict)
         expr = expr_base.subs(var_base, parsed_expr)
 
-        # Analizar forma de la variable: t - tau o t + tau
+        # Analyze structure to adjust horizontal axis and ticks based on t ± tau
         xticks = self.init_xticks_arg
         horiz_range = self.horiz_range
         xticks_custom = None
@@ -989,7 +1335,7 @@ class SignalPlotter:
                 diff2 = parsed_expr - t
                 coef = diff2.coeff(tau)
                 if coef == -1:
-                    # Caso t - tau => invertir ejes y etiquetas
+                    # Case t - tau ⇒ reverse x-axis and relabel ticks
                     if xticks == 'auto':
                         xticks_custom = [t_val]
                         xtick_labels_custom = [sp.latex(t)]
@@ -1002,7 +1348,7 @@ class SignalPlotter:
                     horiz_range = (t_val - np.array(self.horiz_range)[::-1]).tolist()
 
                 elif coef == 1:
-                    # Caso t + tau => solo desplazamiento
+                     # Case t + tau ⇒ shift axis and relabel accordingly
                     if xticks == 'auto':
                         xticks_custom = [t_val]
                         xtick_labels_custom = [sp.latex(t)]
@@ -1014,9 +1360,10 @@ class SignalPlotter:
                         ]
                     horiz_range = (np.array(self.horiz_range) - t_val).tolist()
 
+        # Evaluate the expression at the given t = t_val
         expr_evaluated = expr.subs(t, t_val)
 
-        # Preparar etiquetas
+        # Prepare labels for axes
         self.expr = expr_evaluated
         self.var = tau
         self.xlabel = sp.latex(tau)
@@ -1027,13 +1374,15 @@ class SignalPlotter:
         else:
             self.ylabel = expr_str.replace("tau", tau_str).replace("t", t_str)
 
-        # Dibujar
+        # Build function and sample it for plotting
         self.func = sp.lambdify(self.var, self.expr, modules=["numpy"])
         self.t_vals = np.linspace(*horiz_range, self.num_points)
 
+        # Extract impulses if any
         self.impulse_locs, self.impulse_areas = self._extract_impulses()
+
+        # Prepare figure and render
         self._setup_figure()
-        # self._prepare_plot()
         self.setup_axes(horiz_range)
         self.draw_function(horiz_range)
         self.draw_impulses()
@@ -1043,9 +1392,34 @@ class SignalPlotter:
 
 
     def plot_convolution_steps(self, x_name, h_name, t_val, tau=None, t=None):
+        """
+        Plots four key signals involved in a convolution step at a fixed time `t_val`:
+        x(tau), x(t-tau), h(tau), h(t-tau)., all in terms of τ.
+
+        This method is particularly useful for visualizing the time-reversed and shifted
+        versions of the input signals used in the convolution integral.
+
+        Notes:
+        - The horizontal axis is adjusted for time-reversed signals (e.g., t−τ),
+        and tick labels are shifted accordingly.
+        - Four separate plots are generated in sequence, with labels and axes automatically set.
+
+        Args:
+            x_name (str): Name of the signal x, previously defined with `add_signal(...)`.
+            h_name (str): Name of the signal h, previously defined with `add_signal(...)`.
+            t_val (float): The fixed time t at which the convolution step is evaluated.
+            tau (sympy.Symbol or str, optional): Symbol for the integration variable (default: 'tau').
+            t (sympy.Symbol or str, optional): Symbol for the time variable (default: 't').
+
+        Examples:
+            >>> sp = SignalPlotter()
+            >>> sp.add_signal("x(t)=sinc(t)")
+            >>> sp.add_signal("h(t)=sinc(t/2)")
+            >>> sp.plot_convolution_steps("x", "h", t_val=1)
+        """
         local_dict = self._get_local_dict()
 
-        # Usar símbolos de 'local_dict' si están definidos
+        # Use default symbols if not provided
         if tau is None:
             tau = local_dict.get('tau')
         elif isinstance(tau, str):
@@ -1056,15 +1430,19 @@ class SignalPlotter:
         elif isinstance(t, str):
             t = sp.Symbol(t)
 
+        # Evaluate x(τ) and h(τ) using their respective symbolic variable
         x_expr = self.signal_defs[x_name].subs(self.var_symbols[x_name], tau)
         h_expr = self.signal_defs[h_name].subs(self.var_symbols[h_name], tau)
+
+        # Compute x(t−τ) and h(t−τ), and substitute t = t_val
         x_shift = x_expr.subs(tau, t - tau).subs(t, t_val)
         h_shift = h_expr.subs(tau, t - tau).subs(t, t_val)
 
+        # Convert to LaTeX strings for labeling
         tau_str = sp.latex(tau)
         t_str = sp.latex(t)
 
-        # xticks personalizados solo para x_shift y h_shift
+        # Generate custom xticks and labels for the shifted signals
         xticks = self.init_xticks_arg
         if xticks == 'auto':
             xticks_shifted = [t_val]
@@ -1079,16 +1457,17 @@ class SignalPlotter:
                 elif delta > 0:
                     label = fr"{t_str}+{delta}"
                 else:
-                    label = fr"{t_str}{delta}"  # delta es negativo, así que el signo ya va incluido
+                    label = fr"{t_str}{delta}"  # delta is already negative
                 xtick_labels_shifted.append(label)
         else:
             xticks_shifted = None
             xtick_labels_shifted = None
 
         horiz_range = self.horiz_range
-        # I get the inverted-shifted range for the horizontal axis (reverse order)
+        # Compute reversed horizontal range for time-reversed signals
         horiz_range_shifted = t_val - np.array(horiz_range)[::-1]
 
+        # Define all 4 signals to be plotted with labels and optional custom ticks
         items = [
             (x_expr, fr"{x_name}({tau_str})", None, None, horiz_range),
             (h_expr, fr"{h_name}({tau_str})", None, None, horiz_range),
@@ -1097,6 +1476,7 @@ class SignalPlotter:
         ]
 
         for expr, label, xticks_custom, xtick_labels_custom, horiz_range_custom in items:
+            # Prepare expression and plot configuration
             self.expr = expr
             self.var = tau
             self.xlabel = fr"\{tau}"
@@ -1104,9 +1484,9 @@ class SignalPlotter:
             self.func = sp.lambdify(self.var, self.expr, modules=["numpy"])
             self.t_vals = np.linspace(*horiz_range_custom, self.num_points)
 
+            # Extract impulses and render the plot
             self.impulse_locs, self.impulse_areas = self._extract_impulses()
             self._setup_figure()
-            # self._prepare_plot()
             self.setup_axes(horiz_range_custom)
             self.draw_function(horiz_range_custom)
             self.draw_impulses()
@@ -1114,14 +1494,25 @@ class SignalPlotter:
             self.draw_labels()
             self.show()
 
-
-
-
-
     def plot_convolution_result(self, x_name, h_name, num_points=None, show_expr=False):
-        import numpy as np
-        import sympy as sp
-        from scipy import integrate
+        """
+        Computes and plots the convolution result y(t) = (x * h)(t) between two signals x(t) and h(t).
+
+        This method automatically:
+        - Detects if either x(τ) or h(t−τ) consists only of Dirac deltas, and applies the convolution property for impulses.
+        - Otherwise, performs numerical integration over τ for a given range of t values.
+        - Displays the resulting function y(t), including impulses if present.
+
+        Notes:
+        - Impulse responses are handled symbolically, while general functions are integrated numerically.
+        - Uses scipy.integrate.quad for general convolution integrals.
+
+        Args:
+            x_name (str): Name of the signal x(t), previously defined via `add_signal(...)`.
+            h_name (str): Name of the signal h(t), previously defined via `add_signal(...)`.
+            num_points (int, optional): Number of time samples to compute for numerical integration. Defaults to self.num_points.
+            show_expr (bool, optional): Reserved for future use; currently unused.
+        """
 
         t = sp.Symbol('t')
         tau = sp.Symbol('tau')
@@ -1129,12 +1520,13 @@ class SignalPlotter:
         if num_points is None:
             num_points = self.num_points
 
-        # Obtener definiciones y variables
+        # Retrieve expressions and their respective symbolic variables
         x_expr = self.signal_defs[x_name]
         h_expr = self.signal_defs[h_name]
         var_x = self.var_symbols[x_name]
         var_h = self.var_symbols[h_name]
 
+        # Express x(τ) and h(t−τ)
         x_tau_expr = x_expr.subs(var_x, tau)
         h_t_tau_expr = h_expr.subs(var_h, t - tau)
 
@@ -1142,7 +1534,7 @@ class SignalPlotter:
         t_vals = np.linspace(*self.horiz_range, num_points)
         y_vals = []
 
-        # Caso 1: x contiene solo deltas => usar propiedad directa
+        # Case 1: x contains only Dirac deltas → apply convolution property
         if x_tau_expr.has(sp.DiracDelta):
             y_expr = 0
             for term in x_tau_expr.as_ordered_terms():
@@ -1158,7 +1550,7 @@ class SignalPlotter:
                     if shift:
                         y_expr += scale * h_expr.subs(var_h, t - shift[0])
 
-            # Extraer impulsos del resultado
+            # Extract impulse locations and amplitudes from resulting expression
             impulse_locs = []
             impulse_areas = []
             for term in y_expr.as_ordered_terms():
@@ -1180,7 +1572,7 @@ class SignalPlotter:
             self.impulse_areas = impulse_areas
             self.func = None
 
-        # Caso 2: h contiene solo deltas => usar propiedad directa
+        # Case 2: h contains only Dirac deltas → apply convolution property
         elif h_t_tau_expr.has(sp.DiracDelta):
             y_expr = 0
             for term in h_t_tau_expr.as_ordered_terms():
@@ -1196,7 +1588,7 @@ class SignalPlotter:
                     if shift:
                         y_expr += scale * x_tau_expr.subs(tau, shift[0])
 
-            # Extraer impulsos del resultado
+            # Extract impulse locations and amplitudes from resulting expression
             impulse_locs = []
             impulse_areas = []
             for term in y_expr.as_ordered_terms():
@@ -1218,7 +1610,7 @@ class SignalPlotter:
             self.impulse_areas = impulse_areas
             self.func = None
 
-        # Caso general: integrar numéricamente
+        # General case: perform numerical convolution via integration
         else:
             x_func_tau = sp.lambdify(tau, x_tau_expr, modules=["numpy"])
             def h_func_tau_shifted(tau_val, t_val):
@@ -1242,10 +1634,12 @@ class SignalPlotter:
                     val = 0
                 y_vals.append(val)
 
+            # Create interpolated numerical function
             self.func = lambda t_: np.interp(t_, t_vals, y_vals)
             self.impulse_locs = []
             self.impulse_areas = []
 
+        # Final configuration for plotting
         self.expr = None
         self.t_vals = t_vals
         self.xlabel = "t"
@@ -1260,28 +1654,9 @@ class SignalPlotter:
         self.show()
 
 
-
-
-
-
-# Asociar los métodos a la clase SignalPlotter
-# setattr(SignalPlotter, "_setup_figure", _setup_figure)
-# setattr(SignalPlotter, "_get_transformations", _get_transformations)
-# etattr(SignalPlotter, "_get_signal_support", _get_signal_support)
-# setattr(SignalPlotter, "plot_convolution_view", plot_convolution_view)
-# setattr(SignalPlotter, "plot_convolution_steps", plot_convolution_steps)
-# setattr(SignalPlotter, "plot_convolution_result", plot_convolution_result)
-
-
-
-# Añadir métodos a la clase SignalPlotter
-# setattr(SignalPlotter, "plot_convolution_view", plot_convolution_view)
-# setattr(SignalPlotter, "plot_convolution_steps", plot_convolution_steps)
-# setattr(SignalPlotter, "plot_convolution_result", plot_convolution_result)
-
         # ✅ Restaurar periodo original al final del todo
         # if name:
-        #     self.periodo = prev_periodo
+        #     self.period = prev_period
 
     # def animate_signal(self, interval=20, save_path=None):
     #     """
@@ -1292,11 +1667,11 @@ class SignalPlotter:
     #     """
     #     # Preparar datos base para la animación (igual que en draw_function, con periodicidad)
     #     t0, t1 = self.horiz_range
-    #     if self.periodo is None:
+    #     if self.period is None:
     #         t_plot = self.t_vals
     #         y_plot = self._eval_func_array(t_plot)
     #     else:
-    #         T = self.periodo
+    #         T = self.period
     #         base_t = np.linspace(-T/2, T/2, self.num_points)
     #         base_y = self.func(base_t)
     #         k_min = int(np.floor((t0 + T/2)/T))
