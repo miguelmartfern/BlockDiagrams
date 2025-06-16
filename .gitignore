@@ -2,3 +2,11 @@
 *.egg-info/
 __pycache__/
 *.py[cod]
+*.howto
+
+# Ignore mkdocs created folder (may be safelly deleted)
+/site/
+
+# Ignore PyPI publishing folders (may be safelly deleted)
+/dist/
+/build/

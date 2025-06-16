@@ -30,20 +30,33 @@ class ElementPosition:
     feedback_pos: Tuple[float, float]
 class DiagramBuilder:
     """
-    Helper class for creating signal processing diagrams step by step.
+    A helper class for incrementally building signal processing diagrams using Matplotlib.
+
+    This class provides high-level methods to add standard diagram components like blocks, arrows,
+    combiners, and input/output labels, keeping track of layout and threading.
+
+    Args:
+        block_length (float, optional): Default horizontal size of blocks.
+        block_height (float, optional): Default vertical size of blocks.
+        fontsize (int, optional): Default font size for all text.
     
-    Keeps track of horizontal position and allows adding components
-    like blocks, arrows, multipliers, and input/output signals in order.
+    Returns:
+        (DiagramBuilder): created object.
+        
+    Examples:
+        >>> from blockdiagrams import DiagramBuilder
+        >>> db1 = DiagramBuilder()
+        >>> db2 = DiagramBuilder(block_length=2, fontsize=16)
     """
     def __init__(self, block_length=1.0, block_height=1.0, fontsize=20):
+        """
+        (Private) Creator of the DiagramBuilder class.
+        """
         self.fig, self.ax = plt.subplots()
-        # self.ax.set_xlim(*xlim)
-        # self.ax.set_ylim(*ylim)
         self.ax.axis('off')  # Hide axes
         self.fontsize = fontsize
         self.block_length = block_length
         self.block_height = block_height
-        # self.spacing = spacing
         self.thread_positions = {}
         self.thread_positions['main'] = [0, 0]
         # Dictionary to store element positions: input_pos, output_pos, feedback_pos
@@ -51,7 +64,29 @@ class DiagramBuilder:
         # Counter for current element
         self.current_element = -1
     
-    def __print_threads__(self):
+    def print_threads(self):
+        """
+        Prints name of each thread in diagram and actual position.
+    
+        Examples:
+            >>> from blockdiagrams import DiagramBuilder
+            >>> db = DiagramBuilder(block_length=1, fontsize=16)
+            >>> # Upper thread
+            >>> db.add("x_1(t)", kind="input", thread='upper', position=(0, 1))
+            >>> db.add("mult", kind="combiner", thread='upper', input_text="e^{-j\\omega_0 t}", input_side='top', operation='mult')
+            >>> db.add("", kind="line", thread='upper')
+            >>> # Lower thread
+            >>> db.add("x_2(t)", kind="input", thread='lower', position=(0, -1))
+            >>> db.add("mult", kind="combiner", input_text="e^{j\\omega_0 t}", input_side='bottom', operation='mult', thread='lower')
+            >>> db.add("", kind="line", thread='lower')
+            >>> input_threads = ['upper', 'lower']
+            >>> # Adder
+            >>> db.add("", kind="mult_combiner", inputs=input_threads, position="auto", operation='sum')
+            >>> # Rest of the diagram (main thread)
+            >>> db.add("x(t)", kind="output")
+            >>> db.show()
+            >>> db.print_threads()
+        """
         for thread in self.thread_positions:
             print(thread, ": ", self.thread_positions[thread])
 
@@ -63,12 +98,16 @@ class DiagramBuilder:
     
     def __get_rotated_pos__(self, init_pos, outvector, angle):
         """
-        Compute rotated point
+        Inner method.
+        Compute rotated point init_pos + outvector.
 
-        Parameters:
-        - init_pos: initial position of the block
-        - outvector: output vector before rotation (respecto to init_pos)
-        - angle: rotation angle in degrees
+        Args:
+            init_pos (Numpy.NDArray or list): Initial position of the block (relative origin of coordinates).
+            outvector (Numpy.NDArray or list): Output vector before rotation (relative position with respect to init_pos).
+            angle (float): Rotation angle in degrees.
+
+        Returns:
+            (Numpy.NDArray): Rotated position of vector init_pos + outvector.
         """
 
         # Output point respect to input point (before rotation)
@@ -83,30 +122,41 @@ class DiagramBuilder:
     def __add_element_position__(self, input_pos: Tuple[float, float], 
                                  output_pos: Tuple[float, float], 
                                  feedback_pos: Tuple[float, float]):
-            """Adds a new element with the given positions."""
-            self.current_element += 1
+        """
+        Inner method.
+        Adds a new element with the given input, output and feedback positions.
+
+        Args:
+            input_pos (Numpy.NDArray or list): Input position of the block.
+            output_pos (Numpy.NDArray or list): Output position of the block.
+            feedback_pos (Numpy.NDArray or list): Feedback port position of the block.
+        """
+        self.current_element += 1
             
-            self.element_positions[self.current_element] = ElementPosition(
-                input_pos=input_pos,
-                output_pos=output_pos,
-                feedback_pos=feedback_pos
-            )
+        self.element_positions[self.current_element] = ElementPosition(
+            input_pos=input_pos,
+            output_pos=output_pos,
+            feedback_pos=feedback_pos
+        )
 
     # --- Drawing functions ---
 
     def __draw_rotated_text__(self, anchor_point, text, angle, rotate_text = True,
                       ha='center', va='center', fontsize=16, offset=(0, 0)):
         """
-        Draws text rotated around the anchor point (x, y) with optional offset.
+        Inner method.
+        Draws text rotated around the anchor point with optional offset. 
+        Text position: rotation(anchor_point + offset)
 
-        Parameters:
-        - ax: matplotlib Axes object.
-        - anchor_point: coordinates of the anchor point.
-        - text: string to display.
-        - angle: rotation angle in degrees.
-        - ha, va: horizontal and vertical alignment.
-        - fontsize: font size.
-        - offset: tuple (dx, dy) in data coordinates, before rotation.
+        Args:
+            anchor_point (Numpy.NDArray or list): Coordinates of the anchor point.
+            text (string): String to display. LaTeX math accepted (without $...$).
+            angle (float): Rotation angle in degrees.
+            rotate_text (bool, optional): Indicates if text must be rotated or not.
+            ha (string, optional): Horizontal alignment: {'center', 'left', 'right'}.
+            va (string, optional): Vertical alignment: {'center', 'bottom', 'top'}.
+            fontsize (int, optional): Font size.
+            offset (Numpy.NDArray or list): Coordinates of texr position respect to anchor point, before rotation.
         """
         # Apply rotation to the offset vector
         dx, dy = offset
@@ -133,22 +183,25 @@ class DiagramBuilder:
                        input_side=None, length=1.5, height=1, fontsize=14, 
                        linestyle='-', orientation='horizontal'):
         """
-        Draws a rectangular block with centered text.
+        Inner method.
+        Draws a rectangular block with centered text, optional texts below and/or above and optional input arrow with text.
 
-        Parameters:
-        - ax: matplotlib Axes object where the diagram is drawn.
-        - initial_position: (x, y) coordinates of the center of the left edge of the block.
-        - text: label to display in the block.
-        - text_below: position of the text below the block
-        - text_above: position of the text above the block
-        - text_offset: vertical offset for the text position.
-        - input_text: label for the input arrow (below or above the arrow).
-        - input_side: 'bottom' or 'top' to place the input arrow.
-        - length: horizontal length of the block.
-        - height: vertical height of the block.
-        - fontsize: font size of the text inside the block.
-        - linesyle: linestyle of the block edge: '-, '--, ':', '-.'.
-        - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle.
+        Args:
+            initial_position (Numpy.NDarray or list): Coordinates of the center position of the input edge of the block.
+            text (string, optional): Label to display in the block.
+            text_below (string, optional): Label to display below the block.
+            text_above (string, optional): Label to display above the block.
+            text_offset (float, optional): Vertical offset for the text position.
+            input_text (string, optional): Label for the optional input arrow (below or above the block).
+            input_side (string, optional): Side to place the input arrow: {'bottom', 'top', None}
+            length (float, optional): Horizontal length of the block. If not entered, default `block_length` is used.
+            height (float, optional): Vertical height of the block. If not entered, default `block_height` is used.
+            fontsize (int, optional): font size of the text inside the block. If not entered, default `fontsize` is used.
+            linestyle (string, optional): linestyle of the block edge: {'-, '--, ':', '-.'}.
+            orientation (string or float, optional): Direction of the block: {'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle}.
+
+        Returns:
+            (Numpy.NDArray): Coordinates of the center position of the output edge of the block.
         """
         # Parameters validation
         if input_side not in (None, 'top', 'bottom'):
@@ -170,7 +223,6 @@ class DiagramBuilder:
             raise ValueError(f"Invalid fontsize: {fontsize}. Font size must be a number.")
         
         
-        # angle = 0
         # Determine rotation angle based on orientation
         if orientation in ['horizontal', 'right']:
             angle = 0
@@ -303,16 +355,21 @@ class DiagramBuilder:
                        text_position = 'above', text_offset=0.2, arrow = True,
                        fontsize=14, orientation='horizontal'):
         """
+        Inner method.
         Draws a horizontal arrow with optional label.
 
-        Parameters:
-        - ax: matplotlib Axes object where the diagram is drawn.
-        - position: (x, y) coordinates of the arrow starting point.
-        - length: horizontal length of the arrow.
-        - text: optional label above the arrow.
-        - text_offset: (x, y) offset for positioning the label relative to the arrow.
-        - fontsize: font size of the label.
-        - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle.
+        Args:
+            initial_position (Numpy.NDarray or list): Coordinates of the starting point of the arrow.
+            length (float, optional): Horizontal length of the block. If not entered, default `block_length` is used.
+            text (string, optional): Label to display in the block.
+            text_position (string, optional): Position of the optional text: {'before', 'after', 'above'}
+            text_offset (float, optional): Vertical offset for the text position.
+            arrow (bool, optional): Indicated if an line mush finish or not in an arrow.
+            fontsize (int, optional): font size of the text inside the block. If not entered, default `fontsize` is used.
+            orientation (string or float, optional): Direction of the block: {'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle}.
+
+        Returns:
+            (Numpy.NDArray): Coordinates of output point of the arrow.
         """
         # end = (initial_position[0] + length, initial_position[1])
         head_width = 0.15 if arrow else 0
@@ -333,10 +390,6 @@ class DiagramBuilder:
             angle = 0
 
         x_in, y_in = initial_position
-
-        # # Center of the block (before rotation)
-        # cx = x_in + length / 2
-        # cy = y_in
 
         # Apply rotation around the connection point (x_ini, y_ini)
         trans = transforms.Affine2D().rotate_deg_around(x_in, y_in, angle) + self.ax.transData   
@@ -399,19 +452,21 @@ class DiagramBuilder:
                             text=None, text_offset=0.2, arrow = True, fontsize=14,
                             first_segment='horizontal', orientation='horizontal'):
         """
-        Draws a right-angled arrow composed of two segments, with a specified first segment.
+        Inner method.
+        Draws a right-angled arrow composed of two segments, with a specified first segment orientation and optional label.
 
-        Parameters:
-        - initial_pos: tuple (x0, y0) starting point
-        - final_pos: tuple (x1, y1) ending point
-        - text: optional label to place near the bend
-        - text_offset: offset for label placement
-        - fontsize: size of the label text
-        - first_segment: 'horizontal' or 'vertical' to decide drawing order
+        Args:
+            initial_position (Numpy.NDarray or list): Coordinates of the starting point of the arrow.
+            final_position (Numpy.NDarray or list): Coordinates of the ending point of the arrow.
+            text (string, optional): Label to display in the block.
+            text_offset (float, optional): Vertical offset for the text position.
+            arrow (bool, optional): Indicates if it must finish or not in an arrow.
+            fontsize (int, optional): font size of the text inside the block. If not entered, default `fontsize` is used.
+            first_segment (string, optional): Drawing order: {'horizontal', 'vertical'}
+            orientation (string or float, optional): Direction of the block: {'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle}.
 
         Returns:
-        - final_pos: the ending position
-        - style: a string like 'right-up', 'down-left', etc.
+            (Numpy.NDArray): Coordinates of output point of the arrow.
         """
         head_width = 0.15 if arrow else 0
 
@@ -481,9 +536,6 @@ class DiagramBuilder:
                                        ha='center', va='bottom', offset=offset_vector,
                                        fontsize=fontsize)
 
-            # self.ax.text(corner[0] + text_offset, corner[1] + text_offset,
-            #             text, fontsize=fontsize, ha='left', va='bottom')
-
         # Compute rotated output point
         output_pos = self.__get_rotated_pos__(final_position, [0, 0], angle)
         # Compute feedback point
@@ -494,20 +546,26 @@ class DiagramBuilder:
         return output_pos
 
     def __draw_combiner__(self, initial_position, height=1,
-                        input_text=None, operation='mult', input_side='bottom', 
+                        input_text=None, input_side='bottom', operation='mult', 
                         text_offset=0.1, signs=[None, None], fontsize=14, orientation='horizontal'):
         """
+        Inner method.
         Draws a combiner block: a circle with a multiplication sign (×), sum sign (+) 
-        or substraction sign (-) inside.
+        or substraction sign (-) inside, with optional signs on each input.
 
-        Parameters:
-        - intial_position: (x, y) coordinates of the starting point.
-        - length: total horizontal length (diameter of the circle).
-        - input_text: label for the bottom input arrow (below or above the arrow).
-        - operation: 'mult' for multiplication sign (×), 'sum' for addition sign (+), 'dif' for substraction sign (-).
-        - text_offset: vertical offset for input/output labels.
-        - fontsize: font size of the labels.
-        - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle.
+        Args:
+            initial_position (Numpy.NDarray or list): Coordinates of the starting point of the arrow.
+            height (float, optional): Vertical height of the block. If not entered, default `block_height` is used.
+            input_text (string, optional): Label for the input arrow (below or above the arrow).
+            input_side (string, optional): Side of the lateral input: {'bottom', 'top'}.
+            operation (string, optional): Operation of the combiner: {'mult', 'sum', 'dif'}.
+            text_offset (float, optional): Vertical offset for the text position.
+            signs (list, optional): Sign to be shown on the horizontal (signs[0]) and vertical (signs[1]) inputs.
+            fontsize (int, optional): font size of the text inside the block. If not entered, default `fontsize` is used.
+            orientation (string or float, optional): Direction of the block: {'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle}.
+
+        Returns:
+            (Numpy.NDArray): Coordinates of output point of the combiner.
         """
         angle = 0
         # Determine rotation angle based on orientation
@@ -628,22 +686,21 @@ class DiagramBuilder:
         return output_pos
 
     def __draw_mult_combiner__(self, initial_position, length, inputs, 
-                               operation='sum', side='bottom', 
-                               fontsize=14, orientation='horizontal'):
+                               operation='sum', orientation='horizontal'):
         """
+        Inner method.
         Draws a summation or multiplication block with multiple inputs distributed 
         along the left edge of a circle, from pi/2 to 3*pi/2. Inputs can have a sign.
 
-        Parameters:
-        - initial_position: (x, y) coordinates of the starting point.
-        - length: total horizontal length (diameter of the circle).
-        - inputs: list of tuples (x, y) or (x, y, sign)
-        # - output_text: label on the output arrow (on the right)
-        - position: center of the summation block (x0, y0)
-        - operation: 'sum' for addition, 'mult' for multiplication
-        # - text_offset: vertical offset for input/output labels.
-        - fontsize: font size of the labels.
-        - orientation: direction of the block: 'horizontal', 'vertical', 'up', 'down', 'left', 'right', or angle.
+        Args:
+            initial_position (Numpy.NDarray or list): Coordinates of the starting point of the arrow.
+            length (float, optional): Horizontal length of the block. If not entered, default `block_length` is used.
+            inputs (list of str): Thread names to combine.
+            operation (string, optional): Operation of the combiner: {'mult', 'sum'}.
+            orientation (string or float, optional): Direction of the block: {'horizontal', 'vertical', 'up', 'down', 'left', 'right', angle}.
+
+        Returns:
+            (Numpy.NDArray): Coordinates of output point of the combiner.
         """
         angle = 0
         # Determine rotation angle based on orientation
@@ -659,7 +716,7 @@ class DiagramBuilder:
             angle = orientation
         else:
             angle = 0
-
+        
         # If position is 'auto', obtain head position
         if isinstance(initial_position, str) and initial_position == 'auto':
             # Get head positions of input threads
@@ -672,7 +729,6 @@ class DiagramBuilder:
             x_in, y_in = initial_position
         
         radius = length / 4
-        # x_out = x_in + length
         cx = x_in + length - radius
         cy = y_in
 
@@ -684,22 +740,22 @@ class DiagramBuilder:
                             facecolor='white', transform=trans, zorder=2)
         self.ax.add_patch(circle)
 
-        # Dibujar símbolo dentro del círculo según operación
+        # Draw symbol inside circle depending on operation
         rel_size = 0.7
         if operation == 'mult':
-            # Líneas diagonales (forma de "X") dentro del círculo
+            # "X" inside circle
             dx = radius * rel_size * np.cos(np.pi / 4)  # Escalamos un poco para que quepa dentro del círculo
             dy = radius * rel_size * np.sin(np.pi / 4)
-            # Línea de 45°
+            #  45° line
             self.ax.plot([cx - dx, cx + dx], [cy - dy, cy + dy], color='black', 
                          linewidth=2, transform=trans, zorder=3)
-            # Línea de 135°
+            # 135° line
             self.ax.plot([cx - dx, cx + dx], [cy + dy, cy - dy], color='black', 
                          linewidth=2, transform=trans, zorder=3)
         elif operation == 'sum':
             dx = radius * rel_size
             dy = radius * rel_size
-            # Líneas horizontales y verticales (forma de "+") dentro del círculo
+            # "+" inside circle
             self.ax.plot([cx - dx, cx + dx], [cy, cy], color='black', 
                          linewidth=2, transform=trans, zorder=3)
             self.ax.plot([cx, cx], [cy - dy, cy + dy], color='black', 
@@ -716,7 +772,7 @@ class DiagramBuilder:
         arrow_width = 0.01
         arrow_head_width = 0.15
 
-        # Flechas de entrada
+        # Input arrows
         for i, inp in enumerate(thread_input_pos):
             xi, yi = inp[:2]
 
@@ -741,24 +797,6 @@ class DiagramBuilder:
                 color='black', transform=self.ax.transData, zorder=1
             ))
 
-        # Flecha de salida
-        # x1 = cx + radius
-
-        # self.ax.add_patch(FancyArrow(
-        #     x1, cy, x_out - x1, 0,
-        #     width=arrow_width,
-        #     length_includes_head=True,
-        #     head_width=arrow_head_width,
-        #     color='black', transform=trans, zorder=1
-        # ))
-
-        # # Texto de salida
-        # if output_text:
-        #     offset_vector = np.array([(x1 + x_out) / 2 - x_in, text_offset])
-        #     self.__draw_rotated_text__(initial_position, output_text, 
-        #                                angle=angle, ha='center', va='bottom', 
-        #                                offset=offset_vector)
-
         # Compute rotated output point
         output_pos = self.__get_rotated_pos__(initial_position, [length, 0], angle)
         # Compute feedback point
@@ -770,19 +808,84 @@ class DiagramBuilder:
 
     def add(self,name, kind='block', thread='main', position=None, debug=False, **kwargs):
         """
-        Adds a diagram element to the current position and advances the x coordinate.
-        `kind` can be: input, output, arrow, block, block_uparrow, mult.
-        """
-        # print(thread)
-        # print(self.current_x)
-        # print(self.positions)
-        # if thread not in self.current_x:
-        #     self.current_x[thread] = 0
-        
-        # if thread == 'main':
-        #     self.current_x['main'] = max(self.current_x.values())
+        Adds an element to the block diagram at the current or specified position of a given thread.
 
-        height = kwargs.get('height', self.block_length)
+        This is the main interface for constructing diagrams by adding components such as blocks, arrows,
+        inputs, outputs, combiners, and connectors. The `kind` parameter determines the type of element,
+        and each type accepts specific keyword arguments listed below.
+
+        Args:
+            name (str): Main label or identifier for the element.
+            kind (str, optional): Type of element. One of:
+                - 'block': Rectangular block.
+                - 'arrow': Straight line with ending arrow.
+                - 'angled_arrow': Rect angle line with or without ending arrow.
+                - 'input': Arrow with text before it.
+                - 'output': Arrow with text after it.
+                - 'line': Straight line without arrow ending.
+                - 'combiner': Circle with (x), (+) or (-) and additional input.
+                - 'mult_combiner': Combiner with multiple inputs.
+            thread (str, optional): Thread identifier.
+            position (tuple or str or None, optional): (x, y) position, 'auto' (for mult_combiner), or None to use current thread position.
+            debug (bool, optional): If True, prints thread positions after placing the element.
+
+        The `**kwargs` vary depending on the `kind`:
+
+        - **kind = 'block'**:
+            - text (str, optional): Label inside the block (defaults to `name`).
+            - text_above (str, optional): Text above the block.
+            - text_below (str, optional): Text below the block.
+            - text_offset (float, optional): Offset for above/below text (defaults to 0.1).
+            - input_text (str, optional): Label for input arrow.
+            - input_side (str, optional): Side of a second optional input: {'top', 'bottom'} (defaults to `None`)
+            - length (float, optional): Block length (defaults to `self.block_length`).
+            - height (float, optional): Block height (defaults to `self.block_height`)..
+            - linestyle (str, optional): Block border line style (defaults to `-`).
+            - orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
+            - fontsize (int, optional): Text font size (defaults to `self.fontsize`).
+
+        - **kind = 'arrow'**, **'input'**, **'output'** or **'line'**:
+            - text (str, optional): Text on the arrow or line (defaults to `name`).
+            - text_position (str, optional): 'above', 'below', 'before', or 'after' (defaults to 'above' for 'arrow' and 'line', 'before' for 'input', and 'after' for 'output').
+            - text_offset (float, optional): Offset for text (defaults to 0.1).
+            - length (float, optional): Arrow or line length (defaults to `self.block_length`).
+            - orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
+            - fontsize (int, optional): Text font size (defaults to `self.fontsize`).
+
+        - **kind = 'angled_arrow'**:
+            - text (str, optional): Text on the arrow or line (defaults to `name`).
+            - final_pos (Numpy.NDarray or list): Coordinates of the ending point of the arrow.
+            - text_position (str, optional): 'above', 'below', 'before', or 'after' (defaults to 'above' for 'arrow' and 'line', 'before' for 'input', and 'after' for 'output').
+            - text_offset (float, optional): Offset for text (defaults to 0.1).
+            - arrow (bool, optional): Indicates if it must finish or not in an arrow.
+            - first_segment (string, optional): Drawing order: {'horizontal', 'vertical'}
+            - orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
+            - fontsize (int, optional): Text font size (defaults to `self.fontsize`).
+
+        - **kind = 'combiner'**:
+            - operation (string, optional): Operation of the combiner: {'mult', 'sum', 'dif'} (defaultds to 'mult').
+            - height (float, optional): Vertical height of the block. (defaults to `self.block_height`).
+            - input_side (string, optional): Side of the lateral input: {'bottom', 'top'} (defaults to 'bottom').
+            - input_text (string, optional): Label for the input arrow (below or above the arrow).
+            - text_offset (float, optional): Offset for text (defaults to 0.1).
+            - signs (list, optional): Sign to be shown on the horizontal (signs[0]) and vertical (signs[1]) inputs.
+            - orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
+            - fontsize (int, optional): Text font size (defaults to `self.fontsize`).
+
+        - **kind = 'mult_combiner'**:
+            - operation (string, optional): Operation of the combiner: {'mult', 'sum', 'dif'} (defaults to 'mult').
+            - length (float, optional): Total element length (defaults to `self.block_length`).
+            - inputs (list of str): Thread names to combine.
+            - operation (string, optional): Operation of the combiner: {'mult', 'sum'} (defaults to 'sum').
+            - orientation (str or float, optional): Orientation of the block: {'horizontal', 'vertical', 'up', 'down' 'right', left' or angle in degrees} (defaults to 'horizontal').
+            - fontsize (int, optional): Text font size (defaults to `self.fontsize`).
+
+        Examples:
+            >>> db = DiagramBuilder()
+            >>> db.add("x(t)", kind="input")
+            >>> db.add("H(s)", kind="block")
+            >>> db.add("y(t)", kind="output")
+        """
 
         # If position is 'auto' (draw_mult_combiner), position is calculated inside that method
         if isinstance(position, str) and position == 'auto':
@@ -819,8 +922,6 @@ class DiagramBuilder:
             # Default arguments
             default_kwargs = {
                 'text': name,
-                # 'text_position': 'above',
-                # 'arrow': True,
                 'text_offset': 0.1,
                 'fontsize': self.fontsize,
                 'orientation': 'horizontal',
@@ -916,7 +1017,6 @@ class DiagramBuilder:
             # Default arguments
             default_kwargs = {
                 'length': self.block_length,
-                'fontsize': self.fontsize,
                 'operation': 'mult',
                 'orientation': 'horizontal'
             }
@@ -942,16 +1042,23 @@ class DiagramBuilder:
 
     def get_current_element(self):
         """
-        Returns the current element index.
+        Returns the current element index (last added).
+
+        Returns:
+            (int): Index of the last added element.
         """
         return self.current_element
     
     def get_position(self, element=None):
         """
-        Returns the positions of the specified element.
+        Returns the positions of the specified element index. If no element specified, last added element is used.
+        The return is a dictinoary with coordinates of `input_pos`, `output_pos` and `feedback_pos` (feedback port coordinates).
         
-        Parameters:
-        - element: number of the element.
+        Args:
+            element (int, optional): index of the element.
+        
+        Returns:
+            (dict of Tuples): Dictionary with three 2-element tuples: `input_pos`, `output_pos` and `feedback_pos`.
         """
         if element is None:
             return self.element_positions[self.current_element]
@@ -962,7 +1069,10 @@ class DiagramBuilder:
 
     def get_thread_position(self, thread='main'):
         """
-        Returns the current position of the specified thread.
+        Returns the current output position of the specified thread.
+
+        Args:
+            thread (str, optional): Thread identifier.
         """
         if thread in self.thread_positions:
             return self.thread_positions[thread]
@@ -972,12 +1082,17 @@ class DiagramBuilder:
         
     def show(self, margin=0.5, scale=1.0, savepath=None):
         """
-        Muestra o guarda el diagrama ajustando los límites al contenido.
+        Displays the current diagram or saves it to a file.
 
-        Parámetros:
-        - margin: margen alrededor del contenido.
-        - scale: factor de escala aplicado al tamaño de la imagen.
-        - savepath: si se proporciona, guarda la figura en lugar de mostrarla.
+        Adjusts the view to fit the full diagram with an optional margin and scaling factor.
+        If no elements have been drawn, simply displays an empty figure.
+
+        Args:
+            margin (float, optional): Margin to add around the diagram (in data units).
+            scale (float, optional): Scaling factor for the figure size.
+            savepath (str, optional): If provided, saves the figure to the specified path (e.g., 'diagram.png' or 'diagram.pdf').
+                                      If None, the diagram is shown in an interactive window.
+
         """
         bbox = self.__get_bbox__()
         if bbox is None:
@@ -992,7 +1107,6 @@ class DiagramBuilder:
         width = x1 - x0
         height = y1 - y0
 
-        # Tamaño de figura en pulgadas: 1 unidad = scale pulgadas
         fig_width = width * scale
         fig_height = height * scale
         self.fig.set_size_inches(fig_width, fig_height)
@@ -1000,8 +1114,8 @@ class DiagramBuilder:
         self.ax.set_xlim(x0, x1)
         self.ax.set_ylim(y0, y1)
         self.ax.set_aspect("equal", adjustable="box")
-        self.ax.set_position([0, 0, 1, 1])  # usa toda la figura
-        self.ax.axis("off")  # opcional
+        self.ax.set_position([0, 0, 1, 1])
+        self.ax.axis("off")
 
         if savepath:
             self.fig.savefig(savepath, bbox_inches='tight', dpi=self.fig.dpi, transparent=False, facecolor='white')
