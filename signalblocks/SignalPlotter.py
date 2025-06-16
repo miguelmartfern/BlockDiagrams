@@ -514,8 +514,7 @@ class SignalPlotter:
         - Ellipsis are drawn at 5% beyond the plot edges when appropriate.
 
         Args:
-            horiz_range (tuple, optional): Tuple (t_min, t_max) to override the default horizontal range.
-            If None, uses `self.horiz_range`.
+            horiz_range (tuple, optional): Tuple (t_min, t_max) to override the default horizontal range. If None, uses `self.horiz_range`.
 
         Examples:
             >>> self.draw_function()
