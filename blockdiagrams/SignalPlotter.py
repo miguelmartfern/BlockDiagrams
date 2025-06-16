@@ -1135,6 +1135,18 @@ class SignalPlotter:
         y_pos = y_lim[1] - 0.1 * (y_lim[1] - y_lim[0])
         self.ax.text(x_pos, y_pos, rf'${self.ylabel}$', fontsize=16, ha='left', va='bottom', rotation=0)
 
+    
+    def _update_expression_and_func(self, expr, var):
+        """
+        Internal helper to update self.expr, self.expr_cont and self.func
+        for plotting, safely removing any DiracDelta terms.
+        """
+        self.expr = expr
+        self.var = var
+        self.expr_cont = self._remove_dirac_terms()
+        self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self._get_local_dict()])
+        self.impulse_locs, self.impulse_areas = self._extract_impulses()
+
     def show(self):
         """
         Displays or saves the final plot, depending on configuration.
@@ -1164,7 +1176,6 @@ class SignalPlotter:
             plt.show()
         plt.close(self.fig)
 
-
     def plot(self, name=None):
         """
         Plots the signal specified by name (or the default if defined via expr_str in constructor).
@@ -1179,7 +1190,7 @@ class SignalPlotter:
 
         Args:
             name (str, optional): Name of the signal to plot, e.g., "x1". If None and `expr_str` was given at init,
-        it uses the last-added expression.
+                it uses the last-added expression.
 
         Raises:
             ValueError: If the signal is not defined or its variable cannot be determined.
@@ -1207,35 +1218,29 @@ class SignalPlotter:
                 raise ValueError(f"Signal '{name}' is not defined.")
             self.current_name = name
             self.func_name = name
-            self.expr = self.signal_defs[name]
 
-            # Determine the independent variable (t, τ, ω, etc.)
-            free_vars = list(self.expr.free_symbols)
-            if free_vars:
-                self.var = free_vars[0]
-            elif name in self.var_symbols:
-                self.var = self.var_symbols[name]
-            else:
-                raise ValueError(f"Could not determine the variable for signal '{name}.'")
+            # Use declared variable or infer it
+            expr = self.signal_defs[name]
+            var = self.var_symbols.get(name, None)
+            if var is None:
+                free_vars = list(expr.free_symbols)
+                if not free_vars:
+                    raise ValueError(f"Could not determine the variable for signal '{name}'.")
+                var = free_vars[0]
 
-            # Axis label setup
-            self.xlabel = str(self.var)
+            # Update expression and lambdified function, remove Dirac terms, extract impulses
+            self._update_expression_and_func(expr, var)
+
+            # Set axis labels
+            self.xlabel = str(var)
             self.ylabel = f"{self.func_name}({self.xlabel})"
             if hasattr(self, 'custom_labels') and self.func_name in self.custom_labels:
                 self.ylabel = self.custom_labels[self.func_name]
 
-            # Prepare expression: remove impulses and extract them separately
-            self.expr_cont = self._remove_dirac_terms()
-            self.impulse_locs, self.impulse_areas = self._extract_impulses()
-
-            # Re-lambdify the continuous function
-            self.var = next(iter(self.var_symbols.values()))
-            self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self._get_local_dict()])
-
             # Time discretization for plotting
             self.t_vals = np.linspace(*self.horiz_range, self.num_points)
 
-            # Create figure and prepare vertical range
+            # Create figure and compute y-range
             self.fig, self.ax = plt.subplots(figsize=self.figsize)
             self._prepare_plot()
 
@@ -1245,10 +1250,95 @@ class SignalPlotter:
         self.draw_impulses()
         self.ax.relim()
         self.ax.autoscale_view()
-
         self.draw_ticks()
         self.draw_labels()
         self.show()
+
+
+    # def plot(self, name=None):
+    #     """
+    #     Plots the signal specified by name (or the default if defined via expr_str in constructor).
+
+    #     This method:
+    #     - Initializes the expression from `expr_str_pending` (if any), only once.
+    #     - Looks up the signal in the internal dictionary (`self.signal_defs`) using its name.
+    #     - Sets up symbolic and numeric representations of the signal.
+    #     - Removes DiracDelta terms from the continuous part.
+    #     - Extracts impulses and prepares data for plotting.
+    #     - Calls the full sequence: axis setup, function drawing, impulses, ticks, labels, and final display/save.
+
+    #     Args:
+    #         name (str, optional): Name of the signal to plot, e.g., "x1". If None and `expr_str` was given at init,
+    #     it uses the last-added expression.
+
+    #     Raises:
+    #         ValueError: If the signal is not defined or its variable cannot be determined.
+
+    #     Examples:
+    #         >>> SignalPlotter("x(t)=rect(t-1)").plot()
+    #         >>> sp1 = SignalPlotter("x(t)=rect(t-1)", period=2)
+    #         >>> sp1.plot("x")
+    #         >>> sp2 = SignalPlotter()
+    #         >>> sp2.add_signal("x(t) = rect(t)")
+    #         >>> sp2.plot("x")
+    #     """
+    #     # Initialize from expr_str (only once), if provided at construction
+    #     if (hasattr(self, 'expr_str_pending') and 
+    #         self.expr_str_pending is not None and 
+    #         isinstance(self.expr_str_pending, str) and 
+    #         not getattr(self, '_initialized_from_expr', False)):
+    #         expr_str = self.expr_str_pending
+    #         self._initialized_from_expr = True
+    #         self.add_signal(expr_str, period=self.period)
+    #         name = list(self.signal_defs.keys())[-1]
+
+    #     if name:
+    #         if name not in self.signal_defs:
+    #             raise ValueError(f"Signal '{name}' is not defined.")
+    #         self.current_name = name
+    #         self.func_name = name
+    #         self.expr = self.signal_defs[name]
+
+    #         # Determine the independent variable (t, τ, ω, etc.)
+    #         free_vars = list(self.expr.free_symbols)
+    #         if free_vars:
+    #             self.var = free_vars[0]
+    #         elif name in self.var_symbols:
+    #             self.var = self.var_symbols[name]
+    #         else:
+    #             raise ValueError(f"Could not determine the variable for signal '{name}.'")
+
+    #         # Axis label setup
+    #         self.xlabel = str(self.var)
+    #         self.ylabel = f"{self.func_name}({self.xlabel})"
+    #         if hasattr(self, 'custom_labels') and self.func_name in self.custom_labels:
+    #             self.ylabel = self.custom_labels[self.func_name]
+
+    #         # Prepare expression: remove impulses and extract them separately
+    #         self.expr_cont = self._remove_dirac_terms()
+    #         self.impulse_locs, self.impulse_areas = self._extract_impulses()
+
+    #         # Re-lambdify the continuous function
+    #         self.var = next(iter(self.var_symbols.values()))
+    #         self.func = sp.lambdify(self.var, self.expr_cont, modules=["numpy", self._get_local_dict()])
+
+    #         # Time discretization for plotting
+    #         self.t_vals = np.linspace(*self.horiz_range, self.num_points)
+
+    #         # Create figure and prepare vertical range
+    #         self.fig, self.ax = plt.subplots(figsize=self.figsize)
+    #         self._prepare_plot()
+
+    #     # Draw all components of the plot
+    #     self.setup_axes()
+    #     self.draw_function()
+    #     self.draw_impulses()
+    #     self.ax.relim()
+    #     self.ax.autoscale_view()
+
+    #     self.draw_ticks()
+    #     self.draw_labels()
+    #     self.show()
 
     # Definir las transformaciones a nivel global para uso posterior
     # def _get_transformations(self):
@@ -1277,6 +1367,7 @@ class SignalPlotter:
         self.fig, self.ax = plt.subplots(figsize=self.figsize)
         self._prepare_plot()
         self.fig.subplots_adjust(right=0.9, top=0.85, bottom=0.15)
+
 
     def plot_convolution_view(self, expr_str, t_val, label=None, tau=None, t=None):
         """
@@ -1310,7 +1401,7 @@ class SignalPlotter:
         import re
         local_dict = self._get_local_dict()
 
-        # Define symbolic variables for τ and t, either from arguments or defaults
+        # Define symbolic variables for τ and t
         if tau is None:
             tau = local_dict.get('tau')
         elif isinstance(tau, str):
@@ -1322,7 +1413,7 @@ class SignalPlotter:
 
         local_dict.update({'tau': tau, 't': t, str(tau): tau, str(t): t})
 
-         # Extract the base signal name from the expression (e.g., 'x' from 'x(t-tau)')
+        # Extract base signal name and ensure it's defined
         if "(" in expr_str:
             name = expr_str.split("(")[0].strip()
             if name not in self.signal_defs:
@@ -1332,11 +1423,11 @@ class SignalPlotter:
         else:
             raise ValueError("Invalid expression: expected something like 'x(t - tau)'.")
 
-        # Parse the inner part of the expression (e.g., 't - tau')
+        # Parse expression and apply to base
         parsed_expr = parse_expr(expr_str.replace(name, "", 1), local_dict)
         expr = expr_base.subs(var_base, parsed_expr)
 
-        # Analyze structure to adjust horizontal axis and ticks based on t ± tau
+        # Analyze structure to adapt axis
         xticks = self.init_xticks_arg
         horiz_range = self.horiz_range
         xticks_custom = None
@@ -1348,7 +1439,7 @@ class SignalPlotter:
                 diff2 = parsed_expr - t
                 coef = diff2.coeff(tau)
                 if coef == -1:
-                    # Case t - tau ⇒ reverse x-axis and relabel ticks
+                    # Case t - tau ⇒ reverse x-axis
                     if xticks == 'auto':
                         xticks_custom = [t_val]
                         xtick_labels_custom = [sp.latex(t)]
@@ -1359,42 +1450,35 @@ class SignalPlotter:
                             for v in xticks
                         ][::-1]
                     horiz_range = (t_val - np.array(self.horiz_range)[::-1]).tolist()
-
                 elif coef == 1:
-                     # Case t + tau ⇒ shift axis and relabel accordingly
+                    # Case t + tau ⇒ shift axis
                     if xticks == 'auto':
-                        xticks_custom = [t_val]
+                        xticks_custom = [- t_val]
                         xtick_labels_custom = [sp.latex(t)]
                     elif isinstance(xticks, (list, tuple)):
-                        xticks_custom = [v - t_val for v in xticks]
+                        xticks_custom = [- t_val + v for v in xticks]
                         xtick_labels_custom = [
                             f"-{sp.latex(t)}" if v == 0 else f"-{sp.latex(t)}{'+' if v > 0 else '-'}{abs(v)}"
                             for v in xticks
                         ]
                     horiz_range = (np.array(self.horiz_range) - t_val).tolist()
 
-        # Evaluate the expression at the given t = t_val
+        # Evaluate the expression at t = t_val
         expr_evaluated = expr.subs(t, t_val)
 
-        # Prepare labels for axes
-        self.expr = expr_evaluated
-        self.var = tau
+        # Update expression and lambdified function
+        self._update_expression_and_func(expr_evaluated, tau)
+
+        # Axis labels
         self.xlabel = sp.latex(tau)
         tau_str = sp.latex(tau)
         t_str = sp.latex(t)
-        if label:
-            self.ylabel = label
-        else:
-            self.ylabel = expr_str.replace("tau", tau_str).replace("t", t_str)
+        self.ylabel = label if label else expr_str.replace("tau", tau_str).replace("t", t_str)
 
-        # Build function and sample it for plotting
-        self.func = sp.lambdify(self.var, self.expr, modules=["numpy"])
+        # Discretize time
         self.t_vals = np.linspace(*horiz_range, self.num_points)
 
-        # Extract impulses if any
-        self.impulse_locs, self.impulse_areas = self._extract_impulses()
-
-        # Prepare figure and render
+        # Prepare and render plot
         self._setup_figure()
         self.setup_axes(horiz_range)
         self.draw_function(horiz_range)
@@ -1402,6 +1486,7 @@ class SignalPlotter:
         self.draw_ticks(xticks=xticks_custom, xtick_labels=xtick_labels_custom)
         self.draw_labels()
         self.show()
+
 
 
     def plot_convolution_steps(self, x_name, h_name, t_val, tau=None, t=None):
@@ -1490,15 +1575,11 @@ class SignalPlotter:
 
         for expr, label, xticks_custom, xtick_labels_custom, horiz_range_custom in items:
             # Prepare expression and plot configuration
-            self.expr = expr
-            self.var = tau
+            self._update_expression_and_func(expr, tau)
             self.xlabel = fr"\{tau}"
             self.ylabel = label
-            self.func = sp.lambdify(self.var, self.expr, modules=["numpy"])
             self.t_vals = np.linspace(*horiz_range_custom, self.num_points)
 
-            # Extract impulses and render the plot
-            self.impulse_locs, self.impulse_areas = self._extract_impulses()
             self._setup_figure()
             self.setup_axes(horiz_range_custom)
             self.draw_function(horiz_range_custom)
@@ -1533,13 +1614,11 @@ class SignalPlotter:
         if num_points is None:
             num_points = self.num_points
 
-        # Retrieve expressions and their respective symbolic variables
         x_expr = self.signal_defs[x_name]
         h_expr = self.signal_defs[h_name]
         var_x = self.var_symbols[x_name]
         var_h = self.var_symbols[h_name]
 
-        # Express x(τ) and h(t−τ)
         x_tau_expr = x_expr.subs(var_x, tau)
         h_t_tau_expr = h_expr.subs(var_h, t - tau)
 
@@ -1547,7 +1626,7 @@ class SignalPlotter:
         t_vals = np.linspace(*self.horiz_range, num_points)
         y_vals = []
 
-        # Case 1: x contains only Dirac deltas → apply convolution property
+        # Case 1: Dirac in x(t)
         if x_tau_expr.has(sp.DiracDelta):
             y_expr = 0
             for term in x_tau_expr.as_ordered_terms():
@@ -1563,7 +1642,7 @@ class SignalPlotter:
                     if shift:
                         y_expr += scale * h_expr.subs(var_h, t - shift[0])
 
-            # Extract impulse locations and amplitudes from resulting expression
+            # Extract impulses from y_expr
             impulse_locs = []
             impulse_areas = []
             for term in y_expr.as_ordered_terms():
@@ -1581,11 +1660,11 @@ class SignalPlotter:
                     impulse_locs.append(shift)
                     impulse_areas.append(float(area))
 
+            self._update_expression_and_func(y_expr, t)
             self.impulse_locs = impulse_locs
             self.impulse_areas = impulse_areas
-            self.func = None
 
-        # Case 2: h contains only Dirac deltas → apply convolution property
+        # Case 2: Dirac in h(t)
         elif h_t_tau_expr.has(sp.DiracDelta):
             y_expr = 0
             for term in h_t_tau_expr.as_ordered_terms():
@@ -1601,7 +1680,6 @@ class SignalPlotter:
                     if shift:
                         y_expr += scale * x_tau_expr.subs(tau, shift[0])
 
-            # Extract impulse locations and amplitudes from resulting expression
             impulse_locs = []
             impulse_areas = []
             for term in y_expr.as_ordered_terms():
@@ -1619,20 +1697,21 @@ class SignalPlotter:
                     impulse_locs.append(shift)
                     impulse_areas.append(float(area))
 
+            self._update_expression_and_func(y_expr, t)
             self.impulse_locs = impulse_locs
             self.impulse_areas = impulse_areas
-            self.func = None
 
-        # General case: perform numerical convolution via integration
+        # Case 3: General convolution via numerical integration
         else:
-            x_func_tau = sp.lambdify(tau, x_tau_expr, modules=["numpy"])
+            x_func_tau = sp.lambdify(tau, x_tau_expr, modules=["numpy", local_dict])
+
             def h_func_tau_shifted(tau_val, t_val):
                 h_t_tau = h_t_tau_expr.subs(t, t_val)
-                h_func = sp.lambdify(tau, h_t_tau, modules=["numpy"])
+                h_func = sp.lambdify(tau, h_t_tau, modules=["numpy", local_dict])
                 return h_func(tau_val)
 
-            support_x = (self.horiz_range[0], self.horiz_range[1])
-            support_h = (self.horiz_range[0], self.horiz_range[1])
+            support_x = self.horiz_range
+            support_h = self.horiz_range
 
             for t_val in t_vals:
                 a = max(support_x[0], t_val - support_h[1])
@@ -1647,13 +1726,12 @@ class SignalPlotter:
                     val = 0
                 y_vals.append(val)
 
-            # Create interpolated numerical function
             self.func = lambda t_: np.interp(t_, t_vals, y_vals)
             self.impulse_locs = []
             self.impulse_areas = []
+            self.expr = None
 
-        # Final configuration for plotting
-        self.expr = None
+        # Final settings and plot
         self.t_vals = t_vals
         self.xlabel = "t"
         self.ylabel = r"y(t)"
@@ -1665,6 +1743,7 @@ class SignalPlotter:
         self.draw_ticks()
         self.draw_labels()
         self.show()
+
 
 
         # ✅ Restaurar periodo original al final del todo
