@@ -1175,7 +1175,6 @@ class SignalPlotter:
             plt.show()
         plt.close(self.fig)
 
-
     def plot(self, name=None):
         """
         Plots the signal specified by name (or the default if defined via expr_str in constructor).
@@ -1190,7 +1189,7 @@ class SignalPlotter:
 
         Args:
             name (str, optional): Name of the signal to plot, e.g., "x1". If None and `expr_str` was given at init,
-                it uses the last-added expression.
+                        it uses the last-added expression.
 
         Raises:
             ValueError: If the signal is not defined or its variable cannot be determined.
@@ -1231,6 +1230,18 @@ class SignalPlotter:
             # Update expression and lambdified function, remove Dirac terms, extract impulses
             self._update_expression_and_func(expr, var)
 
+            # Use declared variable or infer it
+            expr = self.signal_defs[name]
+            var = self.var_symbols.get(name, None)
+            if var is None:
+                free_vars = list(expr.free_symbols)
+                if not free_vars:
+                    raise ValueError(f"Could not determine the variable for signal '{name}'.")
+                var = free_vars[0]
+
+            # Update expression and lambdified function, remove Dirac terms, extract impulses
+            self._update_expression_and_func(expr, var)
+
             # Set axis labels
             self.xlabel = str(var)
             self.ylabel = f"{self.func_name}({self.xlabel})"
@@ -1253,6 +1264,10 @@ class SignalPlotter:
         self.draw_ticks()
         self.draw_labels()
         self.show()
+
+    # Definir las transformaciones a nivel global para uso posterior
+    # def _get_transformations(self):
+    #     return self.transformations
 
     ## Convolution-specific methods
 
@@ -1277,6 +1292,7 @@ class SignalPlotter:
         self.fig, self.ax = plt.subplots(figsize=self.figsize)
         self._prepare_plot()
         self.fig.subplots_adjust(right=0.9, top=0.85, bottom=0.15)
+
 
     def plot_convolution_view(self, expr_str, t_val, label=None, tau=None, t=None):
         """
