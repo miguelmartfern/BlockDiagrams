@@ -465,7 +465,7 @@ sp.plot("H_abs")
 ## Upcoming Improvements
 
 - Complex plane representations.
-- Signals representation.
+- Discrete time signals representation.
 
 ---
 
