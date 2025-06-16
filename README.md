@@ -315,7 +315,7 @@ Contributions are welcome! Please open an issue or pull request on GitHub.
 ## License
 
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [GNU GENERAL PUBLIC LICENSE](LICENSE).
 
 
 ---
