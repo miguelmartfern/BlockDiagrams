@@ -1,8 +1,8 @@
-site_name: BlockDiagrams
-site_description: "A Python library for drawing block diagrams with Matplotlib"
+site_name: SignalBlocks
+site_description: "A Python library for visualizing and manipulating signal processing signals & systems"
 site_author: "Miguel Á. Martín-Fernández"
-repo_url: https://github.com/miguelmartfern/BlockDiagrams
-repo_name: miguelmartfern/BlockDiagrams
+repo_url: https://github.com/miguelmartfern/SignalBlocks
+repo_name: miguelmartfern/SignalBlocks
 
 theme:
   name: material
@@ -19,6 +19,9 @@ plugins:
   - search
   - mkdocstrings:
       default_handler: python
+      handlers:
+        python:
+          paths: ["signalblocks"]  # Directory where your .py modules are located
 
 nav:
   - Home: index.md

@@ -3,7 +3,7 @@
 
 [![Documentation Status](https://img.shields.io/badge/docs-online-blue.svg)](https://miguelmartfern.github.io/SignalBlocks/)
 
-**SignalBlocks** is a Python library for visualizing and manipulating signal processing systems.
+**SignalBlocks** is a Python library for visualizing and manipulating signals & systems.
 
 Version **2.0.0** introduces full support for symbolic signal definitions, time-domain operations (shifting, scaling, convolution), and automatic plotting of both continuous and impulsive components. It also maintains backward compatibility with all previous block diagram features.
 

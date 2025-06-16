@@ -1,5 +1,15 @@
 # API Reference
 
-## BlockDiagrams
+## DiagramBuilder
 
-::: blockdiagrams.DiagramBuilder
+::: signalblocks.DiagramBuilder
+    handler: python
+    options:
+      show_source: true
+
+## SignalPlotter
+
+::: signalblocks.SignalPlotter
+    handler: python
+    options:
+      show_source: true
