@@ -357,22 +357,51 @@ sp.plot("x3")
 
 ![Signal Plot](docs/notebooks/signal7.png)
 
-### Time Operations and Convolution
+### Convolution Examples
 
 ```python
-sp = SignalPlotter()
-sp.add_signal("x(t)=rect(t)")
-sp.add_signal("h(t)=tri(t)")
-sp.plot_convolution_steps("x", "h", t_val=1)  # Intermediate views
-sp.plot_convolution_view("h(t+tau)", t_val=1)  # Intermediate views
-sp.plot_convolution_result("x", "h", num_points=100)          # Final result
+from signalblocks import SignalPlotter
+
+sp = SignalPlotter(xticks=[-1, 0, 3], fraction_ticks=True)
+sp.add_signal("x(t)=exp(-2t)*u(t)")
+sp.add_signal("h(t)=u(t)")
+sp.plot_convolution_steps("x", "h", t_val=1)
+sp.plot_convolution_view("h(t+tau)", t_val=1, tau='lambda')
+sp.plot_convolution_result("x", "h", num_points=100)
 ```
 ![Signal Plot](docs/notebooks/convolution_example1.png)
 ![Signal Plot](docs/notebooks/convolution_example2.png)
 ![Signal Plot](docs/notebooks/convolution_example3.png)
 ![Signal Plot](docs/notebooks/convolution_example4.png)
 ![Signal Plot](docs/notebooks/convolution_example5.png)
+
+```python
+from signalblocks import SignalPlotter
+
+sp = SignalPlotter(figsize=[16,4], horiz_range=(-10, 10), xticks=[-2, 0, 2], fraction_ticks=True)
+
+sp.add_signal("x(t)=sinc(t)")
+sp.add_signal("h(t)=sinc(t/2)")
+
+sp.plot("x")
+sp.plot("h")
+sp.plot_convolution_result("x", "h", num_points=200)
+```
 ![Signal Plot](docs/notebooks/convolution_example6.png)
+![Signal Plot](docs/notebooks/convolution_example7.png)
+![Signal Plot](docs/notebooks/convolution_example8.png)
+
+```python
+from signalblocks import SignalPlotter
+
+sp = SignalPlotter(horiz_range=(-0, 3), xticks_delta=0.5, fraction_ticks=True)
+
+sp.add_signal("x(t)=exp(-t)*u(t)")
+sp.add_signal("h(t)=delta(t-0.5)")
+sp.plot_convolution_result("x", "h")
+```
+
+![Signal Plot](docs/notebooks/convolution_example9.png)
 
 ### Complex Signals
 
