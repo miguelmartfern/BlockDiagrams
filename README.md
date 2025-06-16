@@ -1,114 +1,77 @@
 
-# BlockDiagrams
+# SignalBlocks
 
-[![Documentation Status](https://img.shields.io/badge/docs-online-blue.svg)](https://miguelmartfern.github.io/BlockDiagrams/)
+[![Documentation Status](https://img.shields.io/badge/docs-online-blue.svg)](https://miguelmartfern.github.io/SignalBlocks/)
 
-**BlockDiagrams** is a lightweight Python library for drawing signal processing block diagrams with any orientation and several branches using Matplotlib. 
+**SignalBlocks** is a Python library for visualizing and manipulating signal processing systems.
 
-It simplifies the visual creation of system and signal diagrams with functions to add blocks, lines, arrows, summation nodes, and multipliers.
+Version **2.0.0** introduces full support for symbolic signal definitions, time-domain operations (shifting, scaling, convolution), and automatic plotting of both continuous and impulsive components. It also maintains backward compatibility with all previous block diagram features.
 
-v1.4.1
 ---
 
-## Features
+## ✨ Main Features
 
-- Draw rectangular blocks with LaTeX math text.
-- Add signal arrows with descriptive labels.
-- Include summation and multiplication nodes for system diagrams.
-- Horizontal, vertical (up and down), or any angle orientation.
-- Easy to use and extend for custom diagrams.
-- Automatic or manual position of elements.
-- Threads for several lines in diagrams.
-- Feedback branches.
+### 🧱 Block Diagram Builder (formerly BlockDiagrams)
+- Draw signal processing block diagrams using LaTeX math notation.
+- Connect elements via labeled lines, summation and multiplication nodes.
+- Support for vertical and angled branches.
+- Feedback loops with automatic positioning.
 
-## New features
+### 📈 Signal Plotting & Symbolic Operations
+- Define signals symbolically: `"x(t)=rect(t-1)"`, `"x(t)=2*delta(t-1)"`, etc.
+- Plot continuous-time signals with arrows, units, and impulses.
+- Built-in primitives: `rect(t)`, `tri(t)`, `delta(t)`, `u(t)`, `sinc(t)`...
+- Combine, scale, delay, flip and modulate signals.
+- Convolution visualization: step-by-step and final result.
+- Periodic extensions and delta scaling support.
 
-v1.4:
-- Added support for feedback branches.
-- Added 'angled_arrow' element.
-- Elements positions accesible through new get_position() method: ('input_pos', 'output_pos' and 'feedback_pos').
+### ⚙️ Transform Tools (beta)
+- Region of Convergence (ROC) visualization for Z-transforms (upcoming in `signalblocks.roc`).
 
-v1.3:
-- Allow for different orientation of elements.
-- 'horizontal', 'vertical', 'up', 'down' or any angle.
-- For 'vertical', 'up' and 'down' orientations text is mantained horizontal.
-
-v1.2:
-- 'block' allows bottom and top inputs.
-- 'block' allows center, above or below text.
-- 'block' allows linestyles.
-- 'block_uparrow' unified within 'block'.
-- New get_position() method.
-
-v1.1:
-- Threads feature added.
-- 'combiner' and 'mult_combiner' modified not to include io arrows.
-
-v1.0:
-- Initial version.
 ---
 
-## Requirements
-
-- Python >= 3.7
-- Matplotlib
-- NumPy
-- Dataclasses
-- Typing
-
-## Installation
-
-The library is published on PyPI. You can install with:
-
-```
-pip install BlockDiagrams
-```
-
-Alternatively, especially if you want to contribute, clone the repository and run:
+## 📦 Installation
 
 ```bash
-git clone https://github.com/miguelmartfern/blockdiagrams.git
-cd blockdiagrams
+pip install signalblocks
+```
+
+Or install locally for development:
+
+```bash
+git clone https://github.com/miguelmartfern/SignalBlocks.git
+cd SignalBlocks
 pip install -e .
 ```
 
-
-Then simply import the `BlockDiagrams.py` module into your project.
-
 ---
 
-## Basic Usage
+## 📐 Diagram Examples
+
+### Basic Block Diagram
 
 ```python
-from blockdiagrams import DiagramBuilder
+from signalblocks import DiagramBuilder
 
 db = DiagramBuilder(block_length=1, fontsize=16)
 
 # Diagram drawing
 db.add("x(t)", kind="input")
-db.add("h_{aa}(t)", kind="block")
-db.add("x_c(t)", kind="arrow")
-db.add("mult", kind="combiner", input_text="p(t)", operation='mult', input_side='bottom')
-db.add("x_p(t)", kind="arrow")
-db.add("C/D", kind="block", input_text="T_s", input_side='bottom')
-db.add("x_d[n]", kind="arrow")
-db.add("D/C", kind="block")
-db.add("x_p(t)", kind="arrow")
-db.add("h_r(t)", kind="block")
-db.add("x_r(t)", kind="output")
+db.add("h_1(t)", kind="block")
+db.add("x_2(t)", kind="arrow")
+db.add("h_2(t)", kind="block")
+db.add("y(t)", kind="output")
 
 #db.show()
-db.show(savepath = "diag1.png")
+db.show(savepath = "diag0.png")
 ```
 
-![Block Diagram](docs/notebooks/diag1.png)
+![Block Diagram](docs/notebooks/diag0.png)
 
----
-
-## More complex examples
+### More complex diagram Example
 
 ```python
-from blockdiagrams import DiagramBuilder
+from signalblocks import DiagramBuilder
 
 db = DiagramBuilder(block_length=1, fontsize=16)
 
@@ -140,8 +103,10 @@ db.show(savepath = "diag2.png")
 
 ![Block Diagram](docs/notebooks/diag2.png)
 
+### Multiple Branches Examples
+
 ```python
-from blockdiagrams import DiagramBuilder
+from signalblocks import DiagramBuilder
 import numpy as np
 
 db = DiagramBuilder(block_length=1, fontsize=16)
@@ -184,8 +149,10 @@ db.show(savepath = "diag3.png")
 
 ![Block Diagram](docs/notebooks/diag3.png)
 
+## Different Orientations Example
+
 ```python
-from blockdiagrams import DiagramBuilder
+from signalblocks import DiagramBuilder
 
 db = DiagramBuilder(block_length=1, fontsize=16)
 
@@ -221,8 +188,10 @@ db.show(savepath = "block_2_branches.png")
 
 ![Block Diagram](docs/notebooks/block_2_branches.png)
 
+### Vertical Diagram Example
+
 ```python
-from blockdiagrams import DiagramBuilder
+from signalblocks import DiagramBuilder
 import numpy as np
 
 angle = 'vertical'
@@ -244,8 +213,10 @@ db.show(savepath = "block_vertical.png")
 
 ![Block Diagram](docs/notebooks/block_vertical.png)
 
+### Feedback Example
+
 ```python
-from blockdiagrams import DiagramBuilder
+from signalblocks import DiagramBuilder
 import numpy as np
 
 db = DiagramBuilder(block_length=1, fontsize=16)
@@ -278,24 +249,187 @@ db.show(savepath = "feedback_diagram.png")
 
 ![Block Diagram](docs/notebooks/feedback_diagram.png)
 
-## Additional examples
+### Additional Examples
 
 [Additional examples notebook 1](docs/notebooks/diag_examples.ipynb)
 [Additional examples notebook 2](docs/notebooks/feedback_examples.ipynb)
 
 ---
 
-## Main Functions
+## 📊 Signal Examples
 
-- `DiagramBuilder(...)`: Creator of the class.
-- `DiagramBuilder.add(...)`: Adds elements to the diagram.
-- `DiagramBuilder.get_position(...)`: Gets actual head position of thread.
-- `DiagramBuilder.show(...)`: Renders/saves diagram block.
-- `DiagramBuilder.get_current_element()`: Returns the current element index.
-- `DiagramBuilder.get_position(...)`: Returns positions (input, output and 
-   feedback) of specified element.
-- `DiagramBuilder.get_thread_position(...)`: Returns current position of the
-   specified thread.
+### Basic Signal Plotting
+
+```python
+from signalblocks import SignalPlotter
+
+SignalPlotter("x(t)=rect(t-1)", horiz_range=(-2, 2)).plot()
+```
+
+![Signal Plot](docs/notebooks/signal1.png)
+
+### Impulses and Composition
+
+```python
+from signalblocks import SignalPlotter
+
+sp = SignalPlotter()
+sp.add_signal("x1(t)=2*delta(t-1)")
+sp.add_signal("x2(t)=rect(t)")
+sp.add_signal("x3(t)=x1(t) + x2(t)")
+sp.plot("x3")
+```
+
+![Signal Plot](docs/notebooks/signal2.png)
+
+### Periodic Signal
+
+```python
+from signalblocks import SignalPlotter
+
+sp = SignalPlotter()
+sp.add_signal("x(t)=rect(t)", period = 2)
+sp.plot("x")
+```
+
+![Signal Plot](docs/notebooks/signal3.png)
+
+### Windowed Cosine
+
+```python
+from signalblocks import SignalPlotter
+import numpy as np
+
+signal1 = SignalPlotter("x(t)=cos(4 pi t)*tri(t/2)", alpha=0.7, horiz_range=[-3, 3], xticks=np.linspace(-2, 2, 9), color='blue', figsize=(12,4), save_path='signal4.png')
+signal1.plot('x')
+```
+
+![Signal Plot](docs/notebooks/signal4.png)
+
+### Piecewise Defined Signal
+
+```python
+from signalblocks import SignalPlotter
+import numpy as np
+
+signal1 = SignalPlotter(horiz_range=[-2.5, 2.5], xticks=np.linspace(-2, 2, 9), color='blue',save_path='signal5.png')
+signal1.add_signal("x(t)=pw((t**2, (t>-1) & (t<0)), (-t, (t>=0) & (t<1)), (0, True))", period=2)
+signal1.plot('x')
+```
+
+![Signal Plot](docs/notebooks/signal5.png)
+
+### Sampling Functions
+
+```python
+from signalblocks import SignalPlotter
+import numpy as np
+
+sp = SignalPlotter(horiz_range=[-5, 5], 
+                   xticks=np.linspace(-5, 5, 11), 
+                   figsize=(15, 6), 
+                   color='red',
+                   fraction_ticks=True)
+sp.add_signal("x(t)=sinc(t)")
+sp.add_signal("p(t)=delta(t-0.5)", period = 1)
+sp.add_signal("x_p(t)=x(t) * (1 + p(t))")
+sp.plot("x_p")
+```
+
+![Signal Plot](docs/notebooks/signal6.png)
+
+### Frequency Representations
+
+```python
+from signalblocks import SignalPlotter
+from numpy import pi
+
+sp = SignalPlotter(horiz_range=(-2*pi, 2*pi), 
+                   vert_range=(-2, 2),
+                   pi_mode=True,
+                   xticks_delta=pi/2, 
+                   yticks_delta=1,)
+sp.add_signal("x1(\omega)=sin(\omega)", label="x_{\\mathrm{base}}(\omega)")
+sp.add_signal("x2(\omega)=x1(2*\omega+1)", label="x_{\\mathrm{esc}}(t)")
+sp.add_signal("x3(\omega)=x2(-\omega)+x1(\omega-3)", label="x_{\\mathrm{comp}}(\omega)")
+sp.plot("x3")
+```
+
+![Signal Plot](docs/notebooks/signal7.png)
+
+### Time Operations and Convolution
+
+```python
+sp = SignalPlotter()
+sp.add_signal("x(t)=rect(t)")
+sp.add_signal("h(t)=tri(t)")
+sp.plot_convolution_steps("x", "h", t_val=1)  # Intermediate views
+sp.plot_convolution_view("h(t+tau)", t_val=1)  # Intermediate views
+sp.plot_convolution_result("x", "h", num_points=100)          # Final result
+```
+![Signal Plot](docs/notebooks/convolution_example1.png)
+![Signal Plot](docs/notebooks/convolution_example2.png)
+![Signal Plot](docs/notebooks/convolution_example3.png)
+![Signal Plot](docs/notebooks/convolution_example4.png)
+![Signal Plot](docs/notebooks/convolution_example5.png)
+![Signal Plot](docs/notebooks/convolution_example6.png)
+
+### Complex Signals
+
+```python
+from signalblocks import SignalPlotter
+from numpy import pi
+
+sp = SignalPlotter(
+    horiz_range=(-9*pi, 9*pi),
+    yticks=[0, 1/5],
+    ytick_labels=['0', 'T_s'],
+    xticks=[-7*pi, -5*pi, 0, 5*pi, 7*pi],
+    pi_mode=True)
+sp.add_signal("H_r(\omega)=exp(-j*\omega/4) * pw((1/5, abs(\omega) <= 5*pi), (1/(10*pi)*(7*pi-abs(\omega)), (abs(\omega) > 5*pi) & (abs(\omega) < 7*pi)), (0, True))")
+sp.add_signal("H_re(\omega)=re(H_r(\omega))", label="\Re\{H_r(\omega)\}")
+sp.add_signal("H_im(\omega)=im(H_r(\omega))", label="\Im\{H_r(\omega)\}")
+sp.add_signal("H_abs(\omega)=abs(H_r(\omega))", label="|H_r(\omega)|")
+sp.add_signal("H_arg(\omega)=arg(H_r(\omega))", label="\\angle\{H_r(\omega)\}")
+sp.plot("H_abs")
+```
+![Signal Plot](docs/notebooks/complex_filter_abs.png)
+![Signal Plot](docs/notebooks/complex_filter_arg.png)
+![Signal Plot](docs/notebooks/complex_filter_re.png)
+![Signal Plot](docs/notebooks/complex_filter_im.png)
+
+### Additional Examples
+
+[Additional examples notebook 1](docs/notebooks/signal_examples.ipynb)
+
+---
+
+## 🔧 API Overview
+
+### `DiagramBuilder`
+- `add(...)`: Add blocks, arrows, summing nodes, etc.
+- `show(...)`: Display or save the diagram.
+- `get_position(...)`, `get_thread_position(...)`: Query positions.
+
+### `SignalPlotter`
+- `add_signal(...)`: Add a symbolic signal definition.
+- `plot(...)`: Plot a single signal.
+- `plot_convolution_steps(...)`: Visualize `x(τ)`, `h(t−τ)`, etc.
+- `plot_convolution_result(...)`: Plot the result of convolution.
+- `plot_convolution_view(...)`: Show intermediate signals like `x(t−τ)`.
+
+---
+
+## 🕰️ Version History
+
+### v2.0.0 (renamed as SignalBlocks)
+- New module `SignalPlotter` with symbolic signal representation and plotting.
+- Convolution support (including impulses).
+- Time-domain transformations: shift, scale, reflect.
+- Maintains all features from v1.x of DiagramBuilder.
+
+### v1.4.1 and earlier (BlockDiagrams)
+- See legacy README at [v1.4.1](https://github.com/miguelmartfern/SignalBlocks/tree/v1.4.1).
 
 ---
 
@@ -306,24 +440,12 @@ db.show(savepath = "feedback_diagram.png")
 
 ---
 
-## Contributing
+## 📄 License
 
-Contributions are welcome! Please open an issue or pull request on GitHub.
-
----
-
-## License
-
-
-This project is licensed under the [GNU GENERAL PUBLIC LICENSE](LICENSE).
-
+This project is licensed under the [GNU GPL v3.0 or later](LICENSE).
 
 ---
 
-## Contact
+## 🙋 Contact
 
-For questions or suggestions, feel free to contact me via GitHub.
-
----
-
-Thank you for using **blockdiagram**!
+Maintained by **Miguel Á. Martín-Fernández** · [migmar@uva.es](mailto:migmar@uva.es) · [GitHub](https://github.com/miguelmartfern/SignalBlocks)

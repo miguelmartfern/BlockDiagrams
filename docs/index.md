@@ -36,7 +36,7 @@ pip install -e .
 ## 🧰 Basic Example
 
 ```python
-from blockdiagrams import DiagramBuilder
+from signalblocks import DiagramBuilder
 
 db = DiagramBuilder(block_length=1, fontsize=16)
 
