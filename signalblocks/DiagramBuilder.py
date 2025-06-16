@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+# DiagramBuilder.py
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Rectangle, FancyArrow
@@ -44,7 +46,7 @@ class DiagramBuilder:
         (DiagramBuilder): created object.
         
     Examples:
-        >>> from blockdiagrams import DiagramBuilder
+        >>> from signalblocks import DiagramBuilder
         >>> db1 = DiagramBuilder()
         >>> db2 = DiagramBuilder(block_length=2, fontsize=16)
     """
@@ -69,7 +71,7 @@ class DiagramBuilder:
         Prints name of each thread in diagram and actual position.
     
         Examples:
-            >>> from blockdiagrams import DiagramBuilder
+            >>> from signalblocks import DiagramBuilder
             >>> db = DiagramBuilder(block_length=1, fontsize=16)
             >>> # Upper thread
             >>> db.add("x_1(t)", kind="input", thread='upper', position=(0, 1))
