@@ -1,8 +1,8 @@
-# BlockDiagrams
+# SignalBlocks
 
-**BlockDiagrams** is a Python library for drawing signal processing and control system block diagrams using Matplotlib.
+**SignalBlocks** is a Python library for visualizing and manipulating signals & systems.
 
-Developed by [Miguel Á. Martín-Fernández](https://github.com/miguelmartfern), the goal of this package is to make it easy to create publication-ready block diagrams with a minimal and intuitive API.
+Developed by [Miguel Á. Martín-Fernández](https://github.com/miguelmartfern), the goal of this package is to make it easy to create publication-ready block diagrams and plot symbolic signal definitions and combinations, including time-domain operations (shifting, scaling, convolution) with a minimal and intuitive API.
 
 ---
 
@@ -11,7 +11,7 @@ Developed by [Miguel Á. Martín-Fernández](https://github.com/miguelmartfern),
 You can install the library using `pip` (once published):
 
 ```bash
-pip install blockdiagrams
+pip install signalblocks
 ```
 
 If you're working locally with the repository:
@@ -24,16 +24,25 @@ pip install -e .
 
 ## 📦 Features
 
-- Draw basic blocks, summing junctions, arrows, and multipliers
-- Horizontal/vertical or any angle layout support
-- Customizable labels and positions
-- Easy integration with Jupyter notebooks
-- Thread for several lines in diagrams
-- Feedback branches
+- Create and draw block diagrams:
+    - Draw basic blocks, summing junctions, arrows, and multipliers
+    - Horizontal/vertical or any angle layout support
+    - Customizable labels and positions
+    - Easy integration with Jupyter notebooks
+    - Thread for several lines in diagrams
+    - Feedback branches
+- Define and plot signals:
+    - Typical signals: steps, deltas, rect, tri, sinc, ramp, ...
+    - Piecewise signals.
+    - Periodic signals support.
+    - Time shift operations.
+    - Signal combinations.
+    - Time sampling support.
+    - Convolutions with intermediate signals plot.
 
 ---
 
-## 🧰 Basic Example
+## 🧰 Block Diagram Basic Example
 
 ```python
 from signalblocks import DiagramBuilder
@@ -68,6 +77,22 @@ This will generate a basic sample and interpolation diagram.
 [Additional examples notebook 1](notebooks/diag_examples.ipynb)
 [Additional examples notebook 2](notebooks/feedback_examples.ipynb)
 
+## 📊 Signal Basic Example
+
+```python
+from signalblocks import SignalPlotter
+
+sp = SignalPlotter()
+sp.add_signal("x1(t)=2*delta(t-1)")
+sp.add_signal("x2(t)=rect(t)")
+sp.add_signal("x3(t)=x1(t) + x2(t)")
+sp.plot("x3")
+```
+
+This will generate a basic signal with a shifted Dirac Delta and a rect.
+
+![Signal Plot](notebooks/signal2.png)
+
 ## 📚 Documentation
 
 See the [API Documentation](reference.md) for full reference of all available drawing functions and parameters.
@@ -76,10 +101,10 @@ See the [API Documentation](reference.md) for full reference of all available dr
 
 ## 🛠️ Contributing
 
-Feel free to open issues or pull requests on [GitHub](https://github.com/miguelmartfern/BlockDiagrams) if you'd like to contribute or report bugs.
+Feel free to open issues or pull requests on [GitHub](https://github.com/miguelmartfern/SignalBlocks) if you'd like to contribute or report bugs.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the [MIT License](https://github.com/miguelmartfern/BlockDiagrams/blob/main/LICENSE).
+This project is licensed under the [GNU GPL v3.0 or later](https://github.com/miguelmartfern/SignalBlocks/blob/main/LICENSE).
