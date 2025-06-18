@@ -300,7 +300,28 @@ class ComplexPlane:
             if circ:
                 ax.add_patch(Circle((0, 0), r, edgecolor='blue', facecolor='none',
                                     linestyle='--', linewidth=1.2, zorder=7))
-    
+
+    def draw_unit_circle(self, linestyle='--', color='black', linewidth=1.2):
+        """
+        Draws unit circle.
+
+        Parameters:
+            linestyle (str, optional): line style for the circle.
+            color (str, optional): color of the circle.
+            linewidth (float, optional): width of the circle line.
+            label (str, optional): label for the circle in the legend.
+        """
+        ax = self.ax
+
+        pos_x = 1 + self.xlim[1] / 25
+        pos_y = self.ylim[1] / 25
+        ax.text(pos_x, pos_y, f"${1}$", fontsize=12,
+                ha='center', va='bottom', color=color,
+                rotation_mode='anchor', zorder=10)
+
+        ax.add_patch(Circle((0, 0), 1, edgecolor=color, facecolor='none',
+                            linestyle=linestyle, linewidth=linewidth, label=f'$|z|=1$', zorder=7))
+
     def label_positions(self, positions, labels, offset=0.08):
         """
         Place labels on given positions, and draw a small black circle at each.
