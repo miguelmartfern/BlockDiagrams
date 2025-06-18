@@ -3,9 +3,10 @@
 
 [![Documentation Status](https://img.shields.io/badge/docs-online-blue.svg)](https://miguelmartfern.github.io/SignalBlocks/)
 
-**SignalBlocks** is a Python library for visualizing and manipulating signals & systems.
+**SignalBlocks** is a Python library for visualizing and manipulating signals & systems with high-quality export for publication-quality figures.
 
-Version **2.0.0** introduces full support for symbolic signal definitions, time-domain operations (shifting, scaling, convolution), and automatic plotting of both continuous and impulsive components. It also maintains backward compatibility with all previous block diagram features.
+Version **2.0** introduces full support for symbolic signal definitions, time-domain operations (shifting, scaling, convolution), and automatic plotting of both continuous and impulsive components. It also maintains backward compatibility with all previous block diagram features.
+Version **2.1** allows to represent comple plane poles, zeros, ROCs of Z transforms.
 
 ---
 
@@ -25,8 +26,15 @@ Version **2.0.0** introduces full support for symbolic signal definitions, time-
 - Convolution visualization: step-by-step and final result.
 - Periodic extensions and delta scaling support.
 
-### ⚙️ Transform Tools (beta)
-- Region of Convergence (ROC) visualization for Z-transforms (upcoming in `signalblocks.roc`).
+### 🔵 Z-Transform Complex Plane Visualization (ComplexPlane)
+- Display Z-transform Region of convergence (ROC):
+    - Inner disk (|z| < a)
+    - Outer disk (|z| > a)
+    - Annular regions (a < |z| < b)
+- Plot poles and zeros directly in the complex plane.
+- Accept both Cartesian (complex numbers) and polar (modulus/angle) coordinates.
+- Support for multiplicities: automatically groups multiple poles/zeros at same location.
+- Draw unit circle, radial guides, and custom annotations. Automatic label placement with overlap avoidance.
 
 ---
 
@@ -431,6 +439,66 @@ sp.plot("H_abs")
 
 [Additional examples notebook 1](docs/notebooks/signal_examples.ipynb)
 
+## 🔵 Z-Transform Complex Plane Visualization Examples
+
+```python
+import numpy as np
+from signalblocks import ComplexPlane
+
+cp = ComplexPlane(xlim=(-2, 2), ylim=(-2, 2))
+
+poles = [1 + 1j, (1, np.pi/2), 1j, 1 - 1j]
+zeros = [0.5 + 0.5j, (0.5, -np.pi/4), 0.5 + 0.5j]
+
+cp.draw_poles_and_zeros(poles=poles, zeros=zeros)
+r1 = cp.min_pole_modulus()
+r2 = cp.max_pole_modulus()
+cp.draw_ROC(f"|z|>{r2}")
+
+cp.draw_radial_guides(labels=["|a|", "|b|"],
+                      radii=[r1, r2],
+                      angles=None,  # auto-ajuste
+                      circles=[True, False])
+
+cp.show(savepath="complex_plane1.png")
+```
+
+![Signal Plot](docs/notebooks/complex_plane1.png)
+
+```python
+import numpy as np
+from signalblocks import ComplexPlane
+
+cp = ComplexPlane(xlim=(-1.5, 1.5), ylim=(-1.5, 1.5))
+
+poles = [(0.5, np.pi/2), (1.3, -np.pi/2)]
+zeros = [(0,0)]
+
+cp.draw_poles_and_zeros(poles=poles, zeros=zeros)
+
+condicion = f"{cp.min_pole_modulus()}<|z|<{cp.max_pole_modulus()}"
+print(condicion)
+
+cp.draw_ROC(condicion)
+
+cp.draw_radial_guides(labels=["r_0"],
+                      radii=[1/np.sqrt(2)],
+                      angles=[-np.pi/6],
+                      circles=[True],
+                      color='black')
+
+positions = [0.5+0.5j, (np.sqrt(2)/2, np.pi)]
+labels = ['1/2+1/2j', '-\sqrt{2}/2']
+
+cp.label_positions(positions, labels)
+
+cp.draw_unit_circle(color='green', linestyle=':', linewidth=3)
+
+cp.show("complex_plane2.png")
+```
+
+![Signal Plot](docs/notebooks/complex_plane2.png)
+
 ---
 
 ## 🔧 API Overview
@@ -447,9 +515,21 @@ sp.plot("H_abs")
 - `plot_convolution_result(...)`: Plot the result of convolution.
 - `plot_convolution_view(...)`: Show intermediate signals like `x(t−τ)`.
 
+### `ComplexPlane`
+- `draw_poles_and_zeros(...)`: Plot poles (×) and zeros (○), supporting multiplicity.
+- `draw_ROC(...)`: Draw Region of Convergence with conditions like |z|<a, |z|>a, or a<|z|<b.
+- `draw_radial_guides(...)`: Add radial lines with labels and optional dashed circles.
+- `label_positions(...)`: Add custom labels at arbitrary positions (complex or polar coordinates).
+- `draw_unit_circle(...)`: Draw the unit circle (|z|=1).
+- `show(...)`: Display or save the complex plane figure.
+
 ---
 
 ## 🕰️ Version History
+
+### v2.1.0
+- New module `ComplexPlane` for Z-Transform Complex Plane Visualization.
+- ROC, poles, zeros, unit circle, ...
 
 ### v2.0.0 (renamed as SignalBlocks)
 - New module `SignalPlotter` with symbolic signal representation and plotting.
@@ -464,7 +544,6 @@ sp.plot("H_abs")
 
 ## Upcoming Improvements
 
-- Complex plane representations.
 - Discrete time signals representation.
 
 ---
