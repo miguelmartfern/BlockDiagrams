@@ -371,6 +371,24 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#additional-examples_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      📊 Additional examples
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#z-transform-complex-plane-visualization-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔵 Z-Transform Complex Plane Visualization Examples
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#documentation" class="md-nav__link">
     <span class="md-ellipsis">
       📚 Documentation
@@ -497,7 +515,7 @@
 
 <h1 id="signalblocks">SignalBlocks</h1>
 <p><strong>SignalBlocks</strong> is a Python library for visualizing and manipulating signals &amp; systems.</p>
-<p>Developed by <a href="https://github.com/miguelmartfern">Miguel Á. Martín-Fernández</a>, the goal of this package is to make it easy to create publication-ready block diagrams and plot symbolic signal definitions and combinations, including time-domain operations (shifting, scaling, convolution) with a minimal and intuitive API.</p>
+<p>Developed by <a href="https://github.com/miguelmartfern">Miguel Á. Martín-Fernández</a>, the goal of this package is to make it easy to create publication-ready block diagrams and plot symbolic signal definitions and combinations, including time-domain operations (shifting, scaling, convolution) and complex plane Z-Transform ROC representations with a minimal and intuitive API.</p>
 <hr />
 <h2 id="installation">🚀 Installation</h2>
 <p>You can install the library using <code>pip</code> (once published):</p>
@@ -526,6 +544,19 @@
 <li>Signal combinations.</li>
 <li>Time sampling support.</li>
 <li>Convolutions with intermediate signals plot.</li>
+</ul>
+</li>
+<li>Z-Transform Complex Plane Visualization (ComplexPlane)<ul>
+<li>Display Z-transform Region of convergence (ROC):<ul>
+<li>Inner disk (|z| &lt; a)</li>
+<li>Outer disk (|z| &gt; a)</li>
+<li>Annular regions (a &lt; |z| &lt; b)</li>
+</ul>
+</li>
+<li>Plot poles and zeros directly in the complex plane.</li>
+<li>Accept both Cartesian (complex numbers) and polar (modulus/angle) coordinates.</li>
+<li>Support for multiplicities: automatically groups multiple poles/zeros at same location.</li>
+<li>Draw unit circle, radial guides, and custom annotations. Automatic label placement with overlap avoidance.</li>
 </ul>
 </li>
 </ul>
@@ -568,6 +599,30 @@ sp.plot(&quot;x3&quot;)
 </code></pre>
 <p>This will generate a basic signal with a shifted Dirac Delta and a rect.</p>
 <p><img alt="Signal Plot" src="notebooks/signal2.png" /></p>
+<h2 id="additional-examples_1">📊 Additional examples</h2>
+<p><a href="notebooks/signal_examples.ipynb">Additional examples notebook 1</a></p>
+<h2 id="z-transform-complex-plane-visualization-examples">🔵 Z-Transform Complex Plane Visualization Examples</h2>
+<pre><code class="language-python">import numpy as np
+from signalblocks import ComplexPlane
+
+cp = ComplexPlane(xlim=(-2, 2), ylim=(-2, 2))
+
+poles = [1 + 1j, (1, np.pi/2), 1j, 1 - 1j]
+zeros = [0.5 + 0.5j, (0.5, -np.pi/4), 0.5 + 0.5j]
+
+cp.draw_poles_and_zeros(poles=poles, zeros=zeros)
+r1 = cp.min_pole_modulus()
+r2 = cp.max_pole_modulus()
+cp.draw_ROC(f&quot;|z|&gt;{r2}&quot;)
+
+cp.draw_radial_guides(labels=[&quot;|a|&quot;, &quot;|b|&quot;],
+                      radii=[r1, r2],
+                      angles=None,  # auto-ajuste
+                      circles=[True, False])
+
+cp.show(savepath=&quot;complex_plane1.png&quot;)
+</code></pre>
+<p><img alt="Signal Plot" src="notebooks/complex_plane1.png" /></p>
 <h2 id="documentation">📚 Documentation</h2>
 <p>See the <a href="reference/">API Documentation</a> for full reference of all available drawing functions and parameters.</p>
 <hr />
