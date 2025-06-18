@@ -259,16 +259,15 @@ class SignalPlotter:
             >>> sp.add_signal("x5(t) = re(x4(t))", label="\Re\{x_4(t)\}")
             >>> sp.plot('x5')
         """
-        m = re.match(r"^(?P<fn>\w+)\((?P<vr>\w+)\)\s*=\s*(?P<ex>.+)$", expr_str)
 
         replacements = {'\\omega': 'ω', '\\tau': 'τ'}
         for latex_var, unicode_var in replacements.items():
             expr_str = expr_str.replace(latex_var, unicode_var)
-        m = re.match(r"^(?P<fn>\w+)\((?P<vr>\w+)\)\s*=\s*(?P<ex>.+)$", expr_str)
+        m = re.match(r"^(?P<name>\w+)\((?P<var>\w+)\)\s*=\s*(?P<expr>.+)$", expr_str)
 
-        name = m.group('fn')
-        var = m.group('vr')
-        body = m.group('ex')
+        name = m.group('name')
+        var = m.group('var')
+        body = m.group('expr')
 
         if var not in self.var_symbols:
             self.var_symbols[var] = sp.Symbol(var)
@@ -281,6 +280,9 @@ class SignalPlotter:
         transformations = standard_transformations + (implicit_multiplication_application,)
         parsed_expr = parse_expr(body, local_dict=local_dict, transformations=transformations)
 
+        # Perform recursive substitution of previously defined signals.
+        # This enables expressions to reference earlier signals (e.g., x(t) = z(t-2) + delta(t))
+        # by replacing every function call (e.g., z(t-2)) with the corresponding shifted expression.
         for other_name, other_expr in self.signal_defs.items():
             f = sp.Function(other_name)
             matches = parsed_expr.find(f)

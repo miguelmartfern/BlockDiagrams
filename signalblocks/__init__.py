@@ -1,6 +1,6 @@
 from .DiagramBuilder import DiagramBuilder
 from .SignalPlotter import SignalPlotter
 from .ComplexPlane import ComplexPlane
-from .DiscreteSignalPlotter import DiscreteSignalPlotter
+from .DiscreteSignalPlotter_auto import DiscreteSignalPlotter
 
-__all__ = ["DiagramBuilder", "SignalPlotter", "DiscreteSignalPlotter", "ComplexPlane"]
+__all__ = ["DiagramBuilder", "SignalPlotter", "DiscreteSignalPlotter_auto", "ComplexPlane"]
