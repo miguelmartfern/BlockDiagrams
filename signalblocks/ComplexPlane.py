@@ -22,10 +22,15 @@ from collections import Counter
 
 class ComplexPlane:
     """
-    Helper class for creating complex plane representations step by step.
-    
-    Keeps track of horizontal position and allows adding components
-    like blocks, arrows, multipliers, and input/output signals in order.
+    Helper class to visualize poles, zeros and regions of convergence (ROC) 
+    on the complex plane of the Z Transform. It supports both cartesian and polar input for coordinates.
+
+    Examples:
+        >>> cp = ComplexPlane()
+        >>> cp.draw_poles_and_zeros(poles=[0.5+0.5j, (0.7, np.pi/4)], zeros=[-0.5+0j, (1, np.pi)])
+        >>> cp.draw_ROC("|z|>0.7")
+        >>> cp.draw_unit_circle()
+        >>> cp.show()
     """
     def __init__(self, figsize=(6, 6), xlim=(-1.5, 1.5), ylim=(-1.5, 1.5), facecolor='white', fontsize=18):
     
@@ -38,11 +43,6 @@ class ComplexPlane:
         self.poles = []
         self.zeros = []
 
-        # circle = Circle((0, 0), 1, edgecolor='black', facecolor='none', linestyle='--', linewidth=1.2, zorder=6)
-        # self.ax.add_patch(circle)
-        # self.ax.plot([1], [0], marker='|', color='black', markersize=10, zorder=7)
-        # self.ax.text(1, 0, "$1$", ha='left', va='bottom', fontsize=14, zorder=7)
-
     # --- Helper functions ---
 
     def __get_bbox__(self):
@@ -52,9 +52,16 @@ class ComplexPlane:
 
     def max_pole_modulus(self, poles=None):
         """
-        Returns the maximum modulus among a list of poles.
-        Each pole can be given in Cartesian (complex number)
-        or polar form (r, θ) as a tuple.
+        Compute maximum modulus of poles.
+
+        Args:
+            poles (list, optional): List of poles (complex or (r, θ) tuples). Defaults to self.poles.
+
+        Returns:
+            float: Maximum modulus.
+
+        Examples:
+            >>> cp.max_pole_modulus()
         """
 
         if poles is None:
@@ -74,9 +81,16 @@ class ComplexPlane:
     
     def min_pole_modulus(self, poles=None):
         """
-        Returns the minimum modulus among a list of poles.
-        Each pole can be given in Cartesian (complex number)
-        or polar form (r, θ) as a tuple.
+        Compute minimum modulus of poles.
+
+        Args:
+            poles (list, optional): List of poles (complex or (r, θ) tuples). Defaults to self.poles.
+
+        Returns:
+            float: Minimum modulus.
+
+        Examples:
+            >>> cp.min_pole_modulus()
         """
 
         if poles is None:
@@ -116,11 +130,14 @@ class ComplexPlane:
 
     def draw_poles_and_zeros(self, poles=None, zeros=None):
         """
-        Draw poles and zeros on the complex plane.
+        Draw poles (red crosses) and zeros (blue circles).
 
-        Parameters:
-        - poles: list of complex numbers or (magnitude, phase) tuples
-        - zeros: list of complex numbers or (magnitude, phase) tuples
+        Args:
+            poles (list, optional): Complex or polar coordinates.
+            zeros (list, optional): Complex or polar coordinates.
+
+        Examples:
+            >>> cp.draw_poles_and_zeros(poles=[0.5+0.5j], zeros=[-0.5])
         """
         if poles:
             new_poles = self._process_points(poles)
@@ -158,24 +175,16 @@ class ComplexPlane:
 
     def draw_ROC(self, condition, color='orange', alpha=0.3, label="ROC"):
         """
-        Draws the Region of Convergence (ROC) on the complex plane.
+        Draw region of convergence (ROC).
 
-        Parameters
-        ----------
-        condition : str
-            ROC condition as a string. Valid formats are:
-            - "|z|<a"
-            - "|z|>a"
-            - "a<|z|<b"
-        R_max : float, optional
-            Maximum radius used to draw the outer boundary when |z| > a.
-            Defaults to 2.5 * max(|xlim|, |ylim|).
-        color : str, optional
-            Fill and edge color of the ROC. Default is 'orange'.
-        alpha : float, optional
-            Transparency of the ROC area. Default is 0.3.
-        label : str, optional
-            Label to use in the legend for the ROC. Default is "ROC".
+        Args:
+            condition (str): One of "|z|<a", "|z|>a", "a<|z|<b".
+            color (str, optional): ROC fill color.
+            alpha (float, optional): Transparency.
+            label (str, optional): Label for legend.
+
+        Examples:
+            >>> cp.draw_ROC("|z|>0.7")
         """
         edge_color = color
 
@@ -218,19 +227,23 @@ class ComplexPlane:
             self.ax.add_patch(patch_border_inner)
 
     def draw_radial_guides(self, labels, radii, angles=None, circles=None,
-                        avoid_overlap=True, delta_angle=np.pi/24, offset_angle=np.pi/30):
+                        avoid_overlap=True, delta_angle=np.pi/24, offset_angle=np.pi/30, color='blue'):
         """
         Draws radial lines from origin with optional labels and dashed circles.
         Avoids placing radios exactly at 0 and pi by offsetting them.
 
-        Parameters:
-            labels (list of str): List of labels to show on each radial.
-            radii (list of float): Radii at which to draw each radial.
-            angles (list of float or None): Optional list of angles in radians.
-            circles (list of bool): Whether to draw a dashed circle at each radius.
-            avoid_overlap (bool): Avoid pole/zero overlap if angles auto-generated.
-            delta_angle (float): Step angle to try when searching free angles.
-            offset_angle (float): Minimal angular offset to avoid 0 and π exactly.
+        Args:
+            labels (list): Labels for each radial.
+            radii (list): Radii.
+            angles (list, optional): Angles (if None, auto-generated).
+            circles (list, optional): If True, draw dashed circle at each radius.
+            avoid_overlap (bool): Avoid conflict with poles/zeros.
+            delta_angle (float): Angular increment if searching free angles.
+            offset_angle (float): Offset from 0 and π.
+            color (str): Color of lines.
+
+        Examples:
+            >>> cp.draw_radial_guides(labels=["a", "b"], radii=[0.5, 1.2])
         """
         ax = self.ax
 
@@ -284,7 +297,7 @@ class ComplexPlane:
             x = r * np.cos(ang)
             y = r * np.sin(ang)
 
-            ax.plot([0, x], [0, y], color='blue', linewidth=2, zorder=8)
+            ax.plot([0, x], [0, y], color=color, linewidth=2, zorder=8)
 
             if label:
                 angle_deg = np.degrees(ang)
@@ -295,21 +308,23 @@ class ComplexPlane:
 
                 ax.text(x * 0.5, y * 0.5 + 0.05, f"${label}$", fontsize=self.fontsize,
                         ha='center', va='bottom', rotation=angle_deg,
-                        rotation_mode='anchor', zorder=10)
+                        rotation_mode='anchor', color=color, zorder=10)
 
             if circ:
-                ax.add_patch(Circle((0, 0), r, edgecolor='blue', facecolor='none',
+                ax.add_patch(Circle((0, 0), r, edgecolor=color, facecolor='none',
                                     linestyle='--', linewidth=1.2, zorder=7))
 
     def draw_unit_circle(self, linestyle='--', color='black', linewidth=1.2):
         """
-        Draws unit circle.
+        Draw unit circle.
 
-        Parameters:
-            linestyle (str, optional): line style for the circle.
-            color (str, optional): color of the circle.
-            linewidth (float, optional): width of the circle line.
-            label (str, optional): label for the circle in the legend.
+        Args:
+            linestyle (str): Line style.
+            color (str): Color.
+            linewidth (float): Line width.
+
+        Examples:
+            >>> cp.draw_unit_circle()
         """
         ax = self.ax
 
@@ -324,18 +339,15 @@ class ComplexPlane:
 
     def label_positions(self, positions, labels, offset=0.08):
         """
-        Place labels on given positions, and draw a small black circle at each.
+        Add text labels at given positions.
 
-        Parameters:
-        -----------
-        positions : list
-            List of positions, either:
-            - complex numbers (x + jy), or
-            - tuples (r, theta) in polar coordinates.
-        labels : list of str
-            Text labels to place at each position.
-        offset : float
-            Vertical offset for the text label to avoid overlapping the marker.
+        Args:
+            positions (list): Complex or polar coordinates.
+            labels (list): Text labels.
+            offset (float): Vertical offset.
+
+        Examples:
+            >>> cp.label_positions([0.5+0.5j], ["A"])
         """
         points_cartesian = self._process_points(positions)
 
@@ -344,13 +356,23 @@ class ComplexPlane:
 
             # Small black circle
             self.ax.plot(x, y, 'o', color='black', markersize=3, zorder=9)
-
+            print(label)
             # Label text slightly above the marker
-            self.ax.text(x, y + offset, label, fontsize=12, ha='center', va='bottom', zorder=10)
+            self.ax.text(x, y + offset, f"${label}$", fontsize=12, ha='center', va='bottom', zorder=10)
 
     # === Show and save ===
 
     def show(self, savepath=None):
+        """
+        Display or save the figure.
+
+        Args:
+            savepath (str, optional): Path to save figure as file. If None, shows the plot.
+
+        Examples:
+            >>> cp.show()
+            >>> cp.show("myplot.png")
+        """
         self.ax.set_aspect('equal')
         self.ax.set_xlim(self.xlim)
         self.ax.set_ylim(self.ylim)
