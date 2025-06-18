@@ -388,7 +388,7 @@ class SignalPlotter:
             self.y_min, self.y_max = -1, 1
 
 
-    def _eval_func_array(self, t):
+    def _evaluate_signal(self, t):
         """
         (Private) Evaluates the continuous (non-impulsive) part of the signal at the given time values.
         Notes:
@@ -404,7 +404,7 @@ class SignalPlotter:
 
         Examples:
             >>> t_vals = np.linspace(-1, 1, 100)
-            >>> y_vals = self._eval_func_array(t_vals)
+            >>> y_vals = self._evaluate_signal(t_vals)
         """
         y = self.func(t)
         return np.full_like(t, y, dtype=float) if np.isscalar(y) else np.array(y, dtype=float)
@@ -527,7 +527,7 @@ class SignalPlotter:
 
         t0, t1 = horiz_range
         t_plot = self.t_vals
-        y_plot = self._eval_func_array(t_plot)
+        y_plot = self._evaluate_signal(t_plot)
 
         # Assure arrays and format
         t_plot = np.array(t_plot)
@@ -550,12 +550,12 @@ class SignalPlotter:
         else:
             N = max(10, int(0.05 * self.num_points))
             xs_left = np.linspace(t0 - 0.05 * span, t0, N)
-            ys_left = np.abs(self._eval_func_array(xs_left))
+            ys_left = np.abs(self._evaluate_signal(xs_left))
             if np.trapz(ys_left, xs_left) > tol:
                 draw_left = True
 
             xs_right = np.linspace(t1, t1 + 0.05 * span, N)
-            ys_right = np.abs(self._eval_func_array(xs_right))
+            ys_right = np.abs(self._evaluate_signal(xs_right))
             if np.trapz(ys_right, xs_right) > tol:
                 draw_right = True
 
@@ -1686,7 +1686,7 @@ class SignalPlotter:
     #     t0, t1 = self.horiz_range
     #     if self.period is None:
     #         t_plot = self.t_vals
-    #         y_plot = self._eval_func_array(t_plot)
+    #         y_plot = self._evaluate_signal(t_plot)
     #     else:
     #         T = self.period
     #         base_t = np.linspace(-T/2, T/2, self.num_points)

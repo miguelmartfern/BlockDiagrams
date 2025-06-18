@@ -111,12 +111,12 @@ class DiscreteSignalPlotter:
             >>> expr = parse_expr("x(t) + rect(t)", local_dict=local_dict)
         """
         d = {
-            'delta':        lambda n: sp.KroneckerDelta(n, 0),
-            'u':            lambda n: sp.Piecewise((1, n >= 0), (0, True)),
-            'rect':         lambda n: sp.Piecewise((1, abs(n) <= 1), (0, True)),
-            'tri':          lambda n: sp.Piecewise((1 - abs(n)/3, abs(n) <= 3), (0, True)),
-            'ramp':         lambda n: sp.Piecewise((n, n>= 0), (0, True)),
-            'sinc':         lambda n: sp.sinc(n),
+            'delta':        lambda n: np.where(n == 0, 1, 0),
+            'u':            lambda n: np.where(n >= 0, 1, 0),
+            'rect':         lambda n: np.where(abs(n) <= 1, 1, 0),
+            'tri':          lambda n: np.where(abs(n) <= 3, 1 - abs(n)/3, 0),
+            'ramp':         lambda n: np.where(n >= 0, n, 0),
+            'sinc':         lambda n: np.sinc(n)
             'KroneckerDelta': sp.KroneckerDelta,
             'pi':           sp.pi,
             'sin':          sp.sin,
@@ -221,3 +221,11 @@ class DiscreteSignalPlotter:
             self.signal_defs[name] = expanded_expr
         else:
             self.signal_defs[name] = parsed_expr
+
+    def _prepare_plot(self):
+
+        Falta
+
+    def _evaluate_signal(self, n_vals):
+        y = self.func(n_vals)
+        return np.full_like(n_vals, y, dtype=float) if np.isscalar(y) else np.array(y, dtype=float)
