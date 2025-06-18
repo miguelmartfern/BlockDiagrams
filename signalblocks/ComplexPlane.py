@@ -58,7 +58,7 @@ class ComplexPlane:
             poles (list, optional): List of poles (complex or (r, θ) tuples). Defaults to self.poles.
 
         Returns:
-            float: Maximum modulus.
+            (float): Maximum modulus.
 
         Examples:
             >>> cp.max_pole_modulus()
@@ -87,7 +87,7 @@ class ComplexPlane:
             poles (list, optional): List of poles (complex or (r, θ) tuples). Defaults to self.poles.
 
         Returns:
-            float: Minimum modulus.
+            (float): Minimum modulus.
 
         Examples:
             >>> cp.min_pole_modulus()

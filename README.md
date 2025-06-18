@@ -6,6 +6,7 @@
 **SignalBlocks** is a Python library for visualizing and manipulating signals & systems with high-quality export for publication-quality figures.
 
 Version **2.0** introduces full support for symbolic signal definitions, time-domain operations (shifting, scaling, convolution), and automatic plotting of both continuous and impulsive components. It also maintains backward compatibility with all previous block diagram features.
+
 Version **2.1** allows to represent comple plane poles, zeros, ROCs of Z transforms.
 
 ---

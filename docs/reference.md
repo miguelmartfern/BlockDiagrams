@@ -13,3 +13,10 @@
     handler: python
     options:
       show_source: true
+
+## ComplexPlane
+
+::: signalblocks.ComplexPlane
+    handler: python
+    options:
+      show_source: true
