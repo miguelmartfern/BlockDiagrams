@@ -3,7 +3,7 @@
 set -e  # Abort on any error
 
 # CONFIGURA ESTO según tu paquete:
-PACKAGE_NAME="blockdiagrams"
+PACKAGE_NAME="signalblocks"
 SETUP_FILE="setup.py"
 
 # 1. Detectar versión actual

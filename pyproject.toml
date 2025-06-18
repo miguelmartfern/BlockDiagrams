@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools >= 68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,7 @@ name = "SignalBlocks"
 version = "2.0.0"
 description = "A complete symbolic and graphical framework for block diagrams, signals transformations and plotting, and Z-transform ROC visualization."
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.8"
 license = { text = "GPL-3.0-or-later" }
 
 authors = [
@@ -16,15 +16,23 @@ authors = [
 
 dependencies = [
     "matplotlib>=3.5",
-    "numpy<1.25",
+    "numpy>=1.26, <2.0",
     "scipy>=1.7",
     "sympy>=1.10"
 ]
 
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
-    "Operating System :: OS Independent"
+    "Operating System :: OS Independent",
+    "Intended Audience :: Education",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Scientific/Engineering :: Mathematics"
 ]
 
 [project.urls]

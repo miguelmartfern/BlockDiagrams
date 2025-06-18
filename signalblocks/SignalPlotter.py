@@ -238,15 +238,14 @@ class SignalPlotter:
     #     self._prepare_plot()
 
     def add_signal(self, expr_str, label=None, period=None):
-        """
+        r"""
         Adds a new signal to the internal dictionary for later plotting.
         - The expression is parsed symbolically using SymPy.
         - If other signals are referenced, their definitions are recursively substituted.
         - If `period` is set, the signal will be expanded as a sum of time-shifted versions over the full horizontal range.
 
         Args:
-            expr_str (str): Signal definition in the form "name(var) = expression",
-        e.g. "x(t) = rect(t) + delta(t-1)". The expression may include previously defined signals.
+            expr_str (str): Signal definition in the form "name(var) = expression", e.g. "x(t) = rect(t) + delta(t-1)". The expression may include previously defined signals.
             label (str, optional): Custom label for the vertical axis when plotting this signal.
             period (float, optional): If provided, the signal will be treated as periodic with this period.
 

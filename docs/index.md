@@ -2,7 +2,7 @@
 
 **SignalBlocks** is a Python library for visualizing and manipulating signals & systems.
 
-Developed by [Miguel Á. Martín-Fernández](https://github.com/miguelmartfern), the goal of this package is to make it easy to create publication-ready block diagrams and plot symbolic signal definitions and combinations, including time-domain operations (shifting, scaling, convolution) with a minimal and intuitive API.
+Developed by [Miguel Á. Martín-Fernández](https://github.com/miguelmartfern), the goal of this package is to make it easy to create publication-ready block diagrams and plot symbolic signal definitions and combinations, including time-domain operations (shifting, scaling, convolution) and complex plane Z-Transform ROC representations with a minimal and intuitive API.
 
 ---
 
@@ -39,6 +39,15 @@ pip install -e .
     - Signal combinations.
     - Time sampling support.
     - Convolutions with intermediate signals plot.
+- Z-Transform Complex Plane Visualization (ComplexPlane)
+    - Display Z-transform Region of convergence (ROC):
+        - Inner disk (|z| < a)
+        - Outer disk (|z| > a)
+        - Annular regions (a < |z| < b)
+    - Plot poles and zeros directly in the complex plane.
+    - Accept both Cartesian (complex numbers) and polar (modulus/angle) coordinates.
+    - Support for multiplicities: automatically groups multiple poles/zeros at same location.
+    - Draw unit circle, radial guides, and custom annotations. Automatic label placement with overlap avoidance.
 
 ---
 
@@ -92,6 +101,36 @@ sp.plot("x3")
 This will generate a basic signal with a shifted Dirac Delta and a rect.
 
 ![Signal Plot](notebooks/signal2.png)
+
+## 📊 Additional examples
+
+[Additional examples notebook 1](notebooks/signal_examples.ipynb)
+
+## 🔵 Z-Transform Complex Plane Visualization Examples
+
+```python
+import numpy as np
+from signalblocks import ComplexPlane
+
+cp = ComplexPlane(xlim=(-2, 2), ylim=(-2, 2))
+
+poles = [1 + 1j, (1, np.pi/2), 1j, 1 - 1j]
+zeros = [0.5 + 0.5j, (0.5, -np.pi/4), 0.5 + 0.5j]
+
+cp.draw_poles_and_zeros(poles=poles, zeros=zeros)
+r1 = cp.min_pole_modulus()
+r2 = cp.max_pole_modulus()
+cp.draw_ROC(f"|z|>{r2}")
+
+cp.draw_radial_guides(labels=["|a|", "|b|"],
+                      radii=[r1, r2],
+                      angles=None,  # auto-ajuste
+                      circles=[True, False])
+
+cp.show(savepath="complex_plane1.png")
+```
+
+![Signal Plot](notebooks/complex_plane1.png)
 
 ## 📚 Documentation
 
