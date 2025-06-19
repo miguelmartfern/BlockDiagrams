@@ -22,7 +22,7 @@ class DiscreteSignalPlotter:
         yticks='auto',
         xtick_labels=None,
         ytick_labels=None,
-        # xticks_delta=None,
+        xticks_delta=None,
         yticks_delta=None,
         # pi_mode=False,
         fraction_ticks=False,
@@ -83,7 +83,19 @@ class DiscreteSignalPlotter:
             if len(self.ytick_labels) != len(self.yticks):
                 raise ValueError("ytick_labels and yticks must have the same length")
 
-        # self.xticks_delta = xticks_delta
+        def is_natural(x, tol=1e-12):
+            if x is None:
+                return False
+            return (abs(x - round(x)) < tol) and (x >= 0)
+
+        if xticks_delta is not None:
+            if not is_natural(xticks_delta):
+                raise ValueError("xticks_delta must be natural (integer >= 0)")
+        self.xticks_delta = xticks_delta
+
+        if yticks_delta is not None:
+            if yticks_delta <= 0:
+                raise ValueError("yticks_delta must be positive")
         self.yticks_delta = yticks_delta
 
         # self.expr_str_pending = expr_str  # Expression to initialize later if plot() is called first
@@ -328,7 +340,7 @@ class DiscreteSignalPlotter:
             self.signal_defs[name] = expanded_expr
             self._update_expression_and_func(name, str(expanded_expr), var_sym)
 
-    def draw_function(self, marker='o', stem_color=None, marker_size=6, line_width=1.8):
+    def draw_function(self, marker='o', stem_color=None, marker_size=6, line_width=3):
         """
         Draws the discrete-time signal as a stem plot.
 
@@ -506,12 +518,30 @@ class DiscreteSignalPlotter:
                     positions.append(int(n))
             return positions
 
+        def format_fraction_label(value, tol=1e-12):
+            from fractions import Fraction
+            f = Fraction(value).limit_denominator(24)
+            if abs(float(f) - value) > tol:
+                return f"{value:.3g}"
+            if f.denominator == 1:
+                return f"{f.numerator}"
+            else:
+                return rf"\frac{{{f.numerator}}}{{{f.denominator}}}"
+
+        def get_unique_yvalues(tol=1e-12):
+            unique = []
+            for y in self.y_vals:
+                if not any(abs(y - u) <= tol for u in unique):
+                    unique.append(y)
+            return sorted(unique)
+        
         def validate_tick_list(ticks, axis):
             if ticks is None:
                 return []
             if isinstance(ticks, str) and ticks == 'auto':
                 return 'auto'
-            arr = np.array(ticks)
+            # Asegurarse que es iterable (aunque sea escalar único)
+            arr = np.atleast_1d(ticks)
             if axis == 'x' and not np.all(np.equal(np.mod(arr, 1), 0)):
                 raise ValueError("All xticks must be integers")
             return list(arr)
@@ -535,10 +565,20 @@ class DiscreteSignalPlotter:
         dx, dy = px_to_data_length(tick_px)
 
         # -------- Y-AXIS --------
-        if isinstance(effective_yticks, str) and effective_yticks == 'auto':
-            y0 = np.floor(self.y_min)
-            y1 = np.ceil(self.y_max)
-            raw_yticks = list(np.linspace(y0, y1, 3))
+        if isinstance(effective_yticks, str):
+            if effective_yticks == 'auto':
+                y0 = np.floor(self.y_min)
+                y1 = np.ceil(self.y_max)
+                if hasattr(self, 'yticks_delta') and self.yticks_delta is not None and self.yticks_delta > 0:
+                    k_min = int(np.floor(y0 / self.yticks_delta))
+                    k_max = int(np.ceil(y1 / self.yticks_delta))
+                    raw_yticks = [k * self.yticks_delta for k in range(k_min, k_max + 1)]
+                else:
+                    raw_yticks = list(np.linspace(y0, y1, 3))
+            elif effective_yticks == 'fit':
+                raw_yticks = get_unique_yvalues(tol)
+            else:
+                raise ValueError(f"Unknown yticks mode: {effective_yticks}")
         elif effective_yticks is None:
             raw_yticks = []
         else:
@@ -550,14 +590,18 @@ class DiscreteSignalPlotter:
                 raise ValueError("ytick_labels and yticks must have the same length")
             ylabels = ytick_labels
         else:
-            ylabels = [f"{y:.3g}" for y in raw_yticks]
+            for y in raw_yticks:
+                if self.fraction_ticks:
+                    ylabels.append(format_fraction_label(y, tol))
+                else:
+                    ylabels.append(f"{y:.3g}")
 
         ylim = self.ax.get_ylim()
         for y, lbl in zip(raw_yticks, ylabels):
             if ylim[0] <= y <= ylim[1]:
                 self.ax.plot([0 - dx/2, 0 + dx/2], [y, y], transform=self.ax.transData,
                              color='black', linewidth=1.2, clip_on=False)
-                offset = (-4, -16) if abs(y) < tol else (-4, 0)
+                offset = (-4, -8) if abs(y) < tol else (-4, 0)
                 self.ax.annotate(rf'${lbl}$', xy=(0, y), xycoords='data',
                                  textcoords='offset points', xytext=offset,
                                  ha='right', va='center', fontsize=12, zorder=10,
@@ -566,7 +610,14 @@ class DiscreteSignalPlotter:
 
         # -------- X-AXIS --------
         if isinstance(effective_xticks, str) and effective_xticks == 'auto':
-            raw_xticks = get_nonzero_positions(name=self.current_name, tol=tol)
+            if hasattr(self, 'xticks_delta') and self.xticks_delta is not None and self.xticks_delta > 0:
+                n_min = self.horiz_range[0]
+                n_max = self.horiz_range[1]
+                k_min = int(np.ceil(n_min / self.xticks_delta))
+                k_max = int(np.floor(n_max / self.xticks_delta))
+                raw_xticks = [k * self.xticks_delta for k in range(k_min, k_max + 1)]
+            else:
+                raw_xticks = get_nonzero_positions()
         elif effective_xticks is None:
             raw_xticks = []
         else:
@@ -582,7 +633,7 @@ class DiscreteSignalPlotter:
 
         xlim = self.ax.get_xlim()
         for n, lbl in zip(raw_xticks, xlabels):
-            if xlim[0] <= n <= xlim[1]:
+            if xlim[0] <= n <= xlim[1] and n != 0:
                 idx = np.where(self.n_vals == n)[0]
                 y_val = self.y_vals[idx[0]] if idx.size > 0 else 0
                 offset_y = 8 if y_val < 0 else -8
