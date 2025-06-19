@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import sympy as sp
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 import re
+import warnings
 
 class DiscreteSignalPlotter:
     """
@@ -465,46 +466,132 @@ class DiscreteSignalPlotter:
         # Prevent labels from being clipped
         self.fig.tight_layout()
 
-    def draw_ticks(self,
-                tick_size_px=None,
-                xticks=None,
-                yticks=None,
-                xtick_labels='auto',
-                ytick_labels='auto'):
+    def draw_ticks(self, xticks=None, yticks=None, xtick_labels='auto', ytick_labels='auto', tick_size_px=None, tol=1e-12):
         """
-        Draws tick marks and labels on both x- and y-axes, using automatic or manual configurations.
-        This method is typically called after `draw_impulses()`.
-        This method is usually called internally from `plot()`, but can also be used manually.
-        
-        Features:
-        - Adds tick marks and LaTeX-formatted labels.
-        - Integrates impulse positions into xticks automatically, unless explicitly overridden.
-        - Supports:
-            - `pi_mode`: labels as multiples of π.
-            - `fraction_ticks`: labels as rational fractions.
-            - Hiding y=0 label if x=0 tick is shown (to avoid overlapping at the origin).
-        - Avoids duplicate tick values based on numerical tolerance.
-
-        Notes:
-        - If `xticks_delta` or `yticks_delta` are provided (in constructor), evenly spaced ticks are placed at multiples.
-        - If custom labels are passed and their count does not match the tick list, raises ValueError.
-        - Labels are drawn on white rounded boxes for visibility over plots.
+        Draws tick marks and labels for discrete signals:
+        - X-axis: optional labels at non-zero positions or user-defined.
+        - Y-axis: tick marks and labels.
 
         Args:
-            tick_size_px (int, optional): Length of tick marks in pixels. If None, uses self.tick_size_px.
             xticks (list or 'auto' or None): X-axis tick positions.
-                - 'auto': automatically computed ticks (even spacing or using xticks_delta).
-                - list: manually specified tick positions.
-                - None: ticks are shown only at Dirac impulse positions.
+                - 'auto': ticks on non-zero values.
+                - list: manually specified integer positions.
+                - None: no xticks.
             yticks (list or 'auto' or None): Y-axis tick positions.
-                - Same behavior as `xticks`.
-            xtick_labels (list or 'auto' or None): Custom labels for xticks (must match length of xticks).
-            ytick_labels (list or 'auto' or None): Same for yticks.
-
-        Examples:
-            >>> self.draw_ticks(xticks='auto', yticks=[-1, 0, 1], ytick_labels=['-1', '0', '1'])
+                - 'auto': automatic range.
+                - list: manually specified values.
+                - None: no yticks.
+            xtick_labels (list or 'auto' or None): Custom labels for xticks.
+            ytick_labels (list or 'auto' or None): Custom labels for yticks.
+            tick_size_px (int, optional): Length of tick marks for yticks in pixels.
+            tol (float): Tolerance for detecting zero values.
         """
+        def get_nonzero_positions(name=None, n_min=None, n_max=None, tol=1e-12):
+            if name is None:
+                if not self.current_name:
+                    raise ValueError("No signal selected.")
+                name = self.current_name
+            if name not in self.signal_defs:
+                raise ValueError(f"Signal '{name}' is not defined.")
+            if not hasattr(self, 'n_vals') or not hasattr(self, 'y_vals') or self.func_name != name:
+                self.plot(name)
+                plt.close(self.fig)
+            positions = []
+            for n, y in zip(self.n_vals, self.y_vals):
+                if n_min is not None and n < n_min:
+                    continue
+                if n_max is not None and n > n_max:
+                    continue
+                if abs(y) > tol:
+                    positions.append(int(n))
+            return positions
 
+        def validate_tick_list(ticks, axis):
+            if ticks is None:
+                return []
+            if isinstance(ticks, str) and ticks == 'auto':
+                return 'auto'
+            arr = np.array(ticks)
+            if axis == 'x' and not np.all(np.equal(np.mod(arr, 1), 0)):
+                raise ValueError("All xticks must be integers")
+            return list(arr)
+
+        def px_to_data_length(tick_px):
+            origin_disp = self.ax.transData.transform((0, 0))
+            up_disp = origin_disp + np.array([0, tick_px])
+            right_disp = origin_disp + np.array([tick_px, 0])
+            origin_data = np.array(self.ax.transData.inverted().transform(origin_disp))
+            up_data = np.array(self.ax.transData.inverted().transform(up_disp))
+            right_data = np.array(self.ax.transData.inverted().transform(right_disp))
+            dy = up_data[1] - origin_data[1]
+            dx = right_data[0] - origin_data[0]
+            return dx, dy
+
+        # --- Determine effective xticks and yticks ---
+        effective_xticks = xticks if xticks is not None else getattr(self, 'init_xticks_arg', 'auto')
+        effective_yticks = yticks if yticks is not None else getattr(self, 'init_yticks_arg', 'auto')
+
+        tick_px = tick_size_px if tick_size_px is not None else self.tick_size_px
+        dx, dy = px_to_data_length(tick_px)
+
+        # -------- Y-AXIS --------
+        if isinstance(effective_yticks, str) and effective_yticks == 'auto':
+            y0 = np.floor(self.y_min)
+            y1 = np.ceil(self.y_max)
+            raw_yticks = list(np.linspace(y0, y1, 3))
+        elif effective_yticks is None:
+            raw_yticks = []
+        else:
+            raw_yticks = validate_tick_list(effective_yticks, 'y')
+
+        ylabels = []
+        if isinstance(ytick_labels, list):
+            if len(ytick_labels) != len(raw_yticks):
+                raise ValueError("ytick_labels and yticks must have the same length")
+            ylabels = ytick_labels
+        else:
+            ylabels = [f"{y:.3g}" for y in raw_yticks]
+
+        ylim = self.ax.get_ylim()
+        for y, lbl in zip(raw_yticks, ylabels):
+            if ylim[0] <= y <= ylim[1]:
+                self.ax.plot([0 - dx/2, 0 + dx/2], [y, y], transform=self.ax.transData,
+                             color='black', linewidth=1.2, clip_on=False)
+                offset = (-4, -16) if abs(y) < tol else (-4, 0)
+                self.ax.annotate(rf'${lbl}$', xy=(0, y), xycoords='data',
+                                 textcoords='offset points', xytext=offset,
+                                 ha='right', va='center', fontsize=12, zorder=10,
+                                 bbox=dict(boxstyle='round,pad=0.1', facecolor='white',
+                                           edgecolor='none', alpha=self.alpha))
+
+        # -------- X-AXIS --------
+        if isinstance(effective_xticks, str) and effective_xticks == 'auto':
+            raw_xticks = get_nonzero_positions(name=self.current_name, tol=tol)
+        elif effective_xticks is None:
+            raw_xticks = []
+        else:
+            raw_xticks = validate_tick_list(effective_xticks, 'x')
+
+        xlabels = []
+        if isinstance(xtick_labels, list):
+            if len(xtick_labels) != len(raw_xticks):
+                raise ValueError("xtick_labels and xticks must have the same length")
+            xlabels = xtick_labels
+        else:
+            xlabels = [f"{int(n)}" for n in raw_xticks]
+
+        xlim = self.ax.get_xlim()
+        for n, lbl in zip(raw_xticks, xlabels):
+            if xlim[0] <= n <= xlim[1]:
+                idx = np.where(self.n_vals == n)[0]
+                y_val = self.y_vals[idx[0]] if idx.size > 0 else 0
+                offset_y = 8 if y_val < 0 else -8
+                self.ax.annotate(rf'${lbl}$', xy=(n, 0), xycoords='data',
+                                 textcoords='offset points', xytext=(0, offset_y),
+                                 ha='center', va='bottom' if offset_y > 0 else 'top',
+                                 fontsize=12, zorder=10,
+                                 bbox=dict(boxstyle='round,pad=0.1', facecolor='white',
+                                           edgecolor='none', alpha=self.alpha))
     def draw_labels(self):
         """
         Heredar de BasePlotter
