@@ -88,6 +88,8 @@ class SignalPlotter:
         """
         self.signal_defs = {}
         self.var_symbols = {}
+        self.custom_labels = {}
+        self.signal_periods = {}
         self.current_name = None
         self.horiz_range = horiz_range
         self.vert_range = vert_range
@@ -295,14 +297,11 @@ class SignalPlotter:
         self.signal_defs[name] = parsed_expr
         self.var_symbols[name] = var_sym
 
-        if label is not None:
-            if not hasattr(self, 'custom_labels'):
-                self.custom_labels = {}
-            self.custom_labels[name] = label
+        # Assign custom label if argument is given
+        self.custom_labels[name] = label
 
         if period is not None:
-            if not hasattr(self, 'signal_periods'):
-                self.signal_periods = {}
+            # Assign period of signal if given
             self.signal_periods[name] = period
 
             # Expand signal as sum of shifts within range
@@ -544,7 +543,7 @@ class SignalPlotter:
         span = t1 - t0
         draw_left = draw_right = False
 
-        # Show alwais if periodic
+        # Show always if periodic
         if hasattr(self, 'signal_periods') and self.current_name in self.signal_periods:
             draw_left = draw_right = True
         else:
@@ -720,7 +719,7 @@ class SignalPlotter:
                          arrowprops=dict(arrowstyle='-|>', linewidth=1.5, color='black',
                                          mutation_scale=16, mutation_aspect=0.8, fc='black'))
 
-        # Draw x-axis arrow
+        # Draw y-axis arrow
         self.ax.annotate('', xy=(0, self.ax.get_ylim()[1]), xytext=(0, self.ax.get_ylim()[0]),
                          arrowprops=dict(arrowstyle='-|>', linewidth=1.5, color='black',
                                          mutation_scale=12, mutation_aspect=2, fc='black'))
@@ -1245,8 +1244,10 @@ class SignalPlotter:
             # Set axis labels
             self.xlabel = str(var)
             self.ylabel = f"{self.func_name}({self.xlabel})"
+
             if hasattr(self, 'custom_labels') and self.func_name in self.custom_labels:
-                self.ylabel = self.custom_labels[self.func_name]
+                if self.custom_labels[self.func_name] is not None:
+                    self.ylabel = self.custom_labels[self.func_name]
 
             # Time discretization for plotting
             self.t_vals = np.linspace(*self.horiz_range, self.num_points)
