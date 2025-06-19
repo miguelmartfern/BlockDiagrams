@@ -353,7 +353,6 @@ class DiscreteSignalPlotter:
         Examples:
             >>> self.draw_function()
         """
-        print('plotting')
         if stem_color is None:
             stem_color = self.color
 
@@ -365,6 +364,37 @@ class DiscreteSignalPlotter:
         markerline.set_marker(marker)
         plt.setp(markerline, markersize=marker_size)
         plt.setp(stemlines, linewidth=line_width)
+
+        n0, n1 = self.horiz_range
+        delta = (n1 - n0) * 0.1
+
+        expr = self.signal_defs[self.current_name]
+        var = self.var_symbols[self.current_name]
+        func = self.funcs[self.current_name]
+        tol = 1e-12
+
+        # Evaluate small neighborhoods outside range numerically
+        n_left = np.arange(n0 - 10, n0)
+        n_right = np.arange(n1 + 1, n1 + 11)
+        
+        try:
+            y_left = np.array(func(n_left), dtype=float)
+            y_right = np.array(func(n_right), dtype=float)
+        except Exception:
+            # fallback in case function can't evaluate
+            y_left = np.zeros_like(n_left, dtype=float)
+            y_right = np.zeros_like(n_right, dtype=float)
+
+        draw_left = np.sum(np.abs(y_left)) > tol
+        draw_right = np.sum(np.abs(y_right)) > tol
+
+        y_mid = (self.y_min + self.y_max) / 2
+        if draw_left:
+            self.ax.text(n0 - delta, y_mid, r'$\cdots$', ha='left', va='center',
+                         color=self.color, fontsize=14, zorder=10)
+        if draw_right:
+            self.ax.text(n1 + delta, y_mid, r'$\cdots$', ha='right', va='center',
+                         color=self.color, fontsize=14, zorder=10)
 
     def _prepare_plot(self, y_vals):
         """
@@ -690,8 +720,6 @@ class DiscreteSignalPlotter:
 
         # Step 1: preprocess to replace [] by () for function-like calls
         expr_body_preprocessed = re.sub(r"(\w+)\s*\[\s*(.+?)\s*\]", r"\1(\2)", expr_body)
-        print('1:', expr_body_preprocessed)
-        
 
         # Build local dictionary with primitives
         local_dict = self._get_local_dict()
@@ -701,22 +729,6 @@ class DiscreteSignalPlotter:
         # Parse expression
         transformations = standard_transformations + (implicit_multiplication_application,)
         parsed_expr = parse_expr(expr_body_preprocessed, local_dict=local_dict, transformations=transformations)
-        print('2:', parsed_expr)
-
-        # Robust substitution of delta(expr)
-        # delta_func = sp.Function('delta')
-        # for expr_delta in parsed_expr.atoms(delta_func):
-        #     argumento = expr_delta.args[0]
-        #     parsed_expr = parsed_expr.subs(expr_delta, sp.KroneckerDelta(argumento, 0))
-        # print('3:', parsed_expr)
-
-        # # Después, reordenar manualmente los KroneckerDelta si sympy ha cambiado el orden:
-        # parsed_expr = parsed_expr.replace(
-        #     lambda expr: isinstance(expr, sp.KroneckerDelta) and expr.args[0] == 0,
-        #     lambda expr: sp.KroneckerDelta(expr.args[1], 0)
-        # )
-        # print('4:', parsed_expr)
-
 
         # Perform recursive substitution of previous signals
         for other_name, other_expr in self.signal_defs.items():
@@ -766,71 +778,6 @@ class DiscreteSignalPlotter:
         if self.show_plot:
             plt.show()
         plt.close(self.fig)
-
-    # def plot(self, name=None):
-    #     """
-    #     Plots the discrete signal specified by name.
-
-    #     This method:
-    #     - Looks up the signal from internal definitions.
-    #     - Evaluates it over the specified integer range.
-    #     - Sets up the axes, ticks, and renders the stem plot.
-        
-    #     Args:
-    #         name (str, optional): Name of the signal to plot.
-    #                             If None, uses the last-added signal.
-
-    #     Raises:
-    #         ValueError: If the signal name is not defined.
-
-    #     Examples:
-    #         >>> dsp = DiscreteSignalPlotter("x[n]=delta(n)+u(n-1)", n_range=(-5, 5))
-    #         >>> dsp.plot("x")
-    #     """
-    #     # If no name provided, use the most recently added signal
-    #     if name is None:
-    #         if not self.signal_defs:
-    #             raise ValueError("No signals defined to plot.")
-    #         name = list(self.signal_defs.keys())[-1]
-
-    #     if name not in self.signal_defs:
-    #         raise ValueError(f"Signal '{name}' is not defined.")
-        
-    #     expr = self.signal_defs[name]
-    #     var = self.var_symbols[name]
-    #     self.xlabel = str(var)
-    #     self.ylabel = f"{name}[{self.xlabel}]"
-    #     if name in self.custom_labels:
-    #         self.ylabel = self.custom_labels[name]
-
-    #     # Create evaluation grid
-    #     self.n_vals = np.arange(self.n_range[0], self.n_range[1]+1)
-        
-    #     # Lambdify expression
-    #     func = sp.lambdify(var, expr, modules=["numpy", self.local_dict])
-        
-    #     # Evaluate
-    #     y_raw = [func(int(n)) for n in self.n_vals]
-    #     self.y_vals = np.array(y_raw, dtype=float)
-
-    #     # Create figure and compute y-range
-    #     self.fig, self.ax = plt.subplots(figsize=self.figsize)
-    #     self._prepare_plot(self.y_vals)
-
-    #     # Draw all components of the plot
-    #     self.setup_axes()
-    #     # Draw stem plot
-    #     markerline, stemlines, baseline = self.ax.stem(
-    #         self.n_vals, self.y_vals)
-    #     markerline.set_color(self.color)
-    #     stemlines.set_color(self.color)
-    #     markerline.set_marker('o')
-    #     plt.setp(markerline, markersize=6)
-    #     plt.setp(stemlines, linewidth=1.8)
-
-    #     self.draw_ticks()
-    #     self.draw_labels()
-    #     self.show()
 
     def plot(self, name=None):
         """
