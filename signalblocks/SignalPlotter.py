@@ -1674,7 +1674,7 @@ class SignalPlotter:
 
         # Case 3: General convolution via numerical integration
         else:
-            # Estimate supports as antes
+            # Estimate supports
             support_x = self._estimate_numerical_support(x_expr, var_x, self.horiz_range, margin_multiplier=1.0)
             support_h = self._estimate_numerical_support(h_expr, var_h, self.horiz_range, margin_multiplier=1.0)
 

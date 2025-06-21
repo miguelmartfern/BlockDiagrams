@@ -528,6 +528,9 @@ cp.show("complex_plane2.png")
 
 ## 🕰️ Version History
 
+### v2.1.1
+- plot_contolution_results() rewritten with optimized performance and better support estimation.
+
 ### v2.1.0
 - New module `ComplexPlane` for Z-Transform Complex Plane Visualization.
 - ROC, poles, zeros, unit circle, ...
