@@ -174,16 +174,20 @@ class DiscreteSignalPlotter:
             # 'delta':        lambda n: sp.Piecewise((1, n == 0), (0, True)),
             # 'KroneckerDelta': sp.KroneckerDelta,
             'delta':        sp.Function('delta'),
-            'u':            lambda n: sp.Piecewise((1, n >= 0), (0, True)),
-            'rect':         lambda n: sp.Piecewise((1, abs(n) <= 1), (0, True)),
-            'tri':          lambda n: sp.Piecewise((1 - abs(n)/3, abs(n) <= 3), (0, True)),
-            'ramp':         lambda n: sp.Piecewise((n, n >= 0), (0, True)),
-            'sinc':         lambda n: sp.sinc(n),
+            # 'u':            lambda n: sp.Piecewise((1, n >= 0), (0, True)),
+            'u':            sp.Function('u'),
+            # 'rect':         lambda n: sp.Piecewise((1, abs(n) <= 1), (0, True)),
+            'rect':         sp.Function('rect'),
+            'tri':          sp.Function('tri'),
+            # 'tri':          lambda n: sp.Piecewise((1 - abs(n)/3, abs(n) <= 3), (0, True)),
+            'ramp':         sp.Function('ramp'),
+            # 'ramp':         lambda n: sp.Piecewise((n, n >= 0), (0, True)),
             'Piecewise':    sp.Piecewise,
             'pw':           sp.Piecewise,
-            'pi':           sp.pi,
             'sin':          sp.sin,
             'cos':          sp.cos,
+            # 'sinc':         lambda n: sp.sinc(n),
+            'sinc':         sp.sinc,
             'exp':          sp.exp,
             're':           sp.re,
             'im':           sp.im,
@@ -192,6 +196,7 @@ class DiscreteSignalPlotter:
             'arg':          sp.arg,
             'i':            sp.I,
             'j':            sp.I,
+            'pi':           sp.pi,
         }
         d.update(self.var_symbols)
         return d
@@ -296,18 +301,6 @@ class DiscreteSignalPlotter:
     #     else:
     #         self.signal_defs[name] = parsed_expr
 
-    def discrete_upsampling_wrapper(func, factor):
-        """
-        Wraps the lambdified function to simulate upsampling behavior.
-        If n is multiple of factor, evaluates func(n//factor), else returns 0.
-        """
-        def wrapped(n):
-            n = np.asarray(n)
-            result = np.zeros_like(n, dtype=float)
-            mask = (n % factor == 0)
-            result[mask] = func(n[mask] // factor)
-            return result
-        return wrapped
     
     def add_signal(self, expr_str, label=None, period=None):
         r"""
@@ -721,6 +714,34 @@ class DiscreteSignalPlotter:
         y_pos = y_lim[1] - 0.1 * (y_lim[1] - y_lim[0])
         self.ax.text(x_pos, y_pos, rf'${self.ylabel}$', fontsize=16, ha='left', va='bottom', rotation=0)
 
+    def discrete_upsampling_wrapper(self, func, factor, offset=0):
+        """
+        Wraps the lambdified function to simulate upsampling behavior with optional offset.
+        If (n - offset) is multiple of factor, evaluates func((n - offset)//factor), else returns 0.
+        """
+        def wrapped(n):
+            n = np.asarray(n)
+            result = np.zeros_like(n, dtype=float)
+            mask = ((n - offset) % factor == 0)
+            valid_n = ((n - offset) // factor)[mask]
+            result[mask] = func(valid_n)
+            return result
+        return wrapped
+    
+    def discrete_upsampling_wrapper(self, func, factor, offset=0):
+        """
+        Wraps the lambdified function to simulate upsampling behavior with optional offset.
+        If (n - offset) is multiple of factor, evaluates func((n - offset)//factor), else returns 0.
+        """
+        def wrapped(n):
+            n = np.asarray(n)
+            result = np.zeros_like(n, dtype=float)
+            mask = ((n - offset) % factor == 0)
+            valid_n = ((n - offset) // factor)[mask]
+            result[mask] = func(valid_n)
+            return result
+        return wrapped
+    
     def _update_expression_and_func(self, name, expr_body, var_sym):
         """
         Parses and updates the symbolic expression and numeric function
@@ -729,12 +750,13 @@ class DiscreteSignalPlotter:
         - Converts array-style access (e.g. z[n-2]) into functional form (z(n-2))
         - Substitutes previously defined signals recursively
         - Lambdifies the final expression for numerical evaluation
+        - Detects upsampling patterns and wraps evaluation if needed
         """
 
         # Step 1: preprocess to replace [] by () for function-like calls
         expr_body_preprocessed = re.sub(r"(\w+)\s*\[\s*(.+?)\s*\]", r"\1(\2)", expr_body)
 
-        # Build local dictionary with primitives
+        # Build local dictionary with primitives as symbolic functions
         local_dict = self._get_local_dict()
         for other_name in self.signal_defs:
             local_dict[other_name] = sp.Function(other_name)
@@ -742,6 +764,9 @@ class DiscreteSignalPlotter:
         # Parse expression
         transformations = standard_transformations + (implicit_multiplication_application,)
         parsed_expr = parse_expr(expr_body_preprocessed, local_dict=local_dict, transformations=transformations)
+
+        # Save symbolic expression before substitution
+        original_expr = parsed_expr
 
         # Perform recursive substitution of previous signals
         for other_name, other_expr in self.signal_defs.items():
@@ -756,11 +781,33 @@ class DiscreteSignalPlotter:
         # Save final symbolic expression
         self.signal_defs[name] = parsed_expr
 
-        # Create numerical function
-        self.funcs[name] = sp.lambdify(
-            var_sym, parsed_expr, 
-            modules=["numpy", self._get_numeric_dict()]
-            )
+        # Create numerical function using numeric_dict
+        # func = sp.lambdify(var_sym, parsed_expr, modules=["numpy", self._get_numeric_dict()])
+        func = sp.lambdify(var_sym, parsed_expr, modules=[self._get_numeric_dict()])
+
+        # Analyze upsampling pattern from original (non-expanded) expression
+        factor = None
+        offset = 0
+        a, b = sp.Wild('a'), sp.Wild('b')
+        pattern = a * var_sym + b
+
+        # Define which functions are discrete-only (subject to upsampling)
+        discrete_functions = {'delta', 'u', 'rect', 'tri', 'ramp'}
+
+        for f in original_expr.atoms(sp.Function):
+            # Allow primitives and user-defined functions
+            if f.func.__name__ in discrete_functions or f.func.__name__ in self.signal_defs:
+                arg = f.args[0]
+                match = arg.match(pattern)
+                if match and match[a].is_Rational and match[a].q > 1:
+                    factor = match[a].q
+                    offset = int(match[b] * factor)
+                    break
+
+        if factor:
+            func = self.discrete_upsampling_wrapper(func, factor, offset)
+
+        self.funcs[name] = func
 
 
     def show(self):
