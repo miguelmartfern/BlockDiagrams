@@ -296,6 +296,19 @@ class DiscreteSignalPlotter:
     #     else:
     #         self.signal_defs[name] = parsed_expr
 
+    def discrete_upsampling_wrapper(func, factor):
+        """
+        Wraps the lambdified function to simulate upsampling behavior.
+        If n is multiple of factor, evaluates func(n//factor), else returns 0.
+        """
+        def wrapped(n):
+            n = np.asarray(n)
+            result = np.zeros_like(n, dtype=float)
+            mask = (n % factor == 0)
+            result[mask] = func(n[mask] // factor)
+            return result
+        return wrapped
+    
     def add_signal(self, expr_str, label=None, period=None):
         r"""
         Adds a new signal definition to the dictionary.
