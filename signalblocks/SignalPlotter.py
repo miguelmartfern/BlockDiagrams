@@ -1514,24 +1514,72 @@ class SignalPlotter:
             self.draw_labels()
             self.show()
 
+    def _estimate_numerical_support(self, expr, var, horiz_range, margin_multiplier=1.0):
+        """
+        Estimate the true support of a signal numerically by evaluating the function
+        over an extended range and detecting where it is significantly nonzero.
+
+        Parameters
+        ----------
+        expr : sympy.Expr
+            The symbolic expression of the signal.
+        var : sympy.Symbol
+            The variable of the expression (t or tau or others).
+        horiz_range : tuple
+            The current horizontal range.
+        margin_multiplier : float
+            Factor to extend the range for safety.
+
+        Returns
+        -------
+        tuple :
+            Estimated (min, max) support where the signal is not negligible.
+        """
+        margin = margin_multiplier * (horiz_range[1] - horiz_range[0])
+        search_range = (horiz_range[0] - margin, horiz_range[1] + margin)
+        num_points = 1000  # resolution
+
+        t_vals = np.linspace(*search_range, num_points)
+        func = sp.lambdify(var, expr, modules=["numpy"])
+        y_vals = np.abs(func(t_vals))
+
+        threshold = np.max(y_vals) * 1e-3  # relative threshold
+        nonzero_indices = np.where(y_vals > threshold)[0]
+
+        if len(nonzero_indices) == 0:
+            return (0.0, 0.0)
+
+        min_index = nonzero_indices[0]
+        max_index = nonzero_indices[-1]
+        return (t_vals[min_index], t_vals[max_index])
+
+
     def plot_convolution_result(self, x_name, h_name, num_points=None, show_expr=False):
         """
-        Computes and plots the convolution result y(t) = (x * h)(t) between two signals x(t) and h(t).
+        Compute and plot the convolution result y(t) = (x * h)(t) between two signals x(t) and h(t).
 
-        This method automatically:
-        - Detects if either x(τ) or h(t−τ) consists only of Dirac deltas, and applies the convolution property for impulses.
-        - Otherwise, performs numerical integration over τ for a given range of t values.
-        - Displays the resulting function y(t), including impulses if present.
+        The function automatically detects impulses (DiracDelta) and applies analytical formulas.
+        For general signals, it supports two numerical integration methods:
 
-        Notes:
-        - Impulse responses are handled symbolically, while general functions are integrated numerically.
-        - Uses scipy.integrate.quad for general convolution integrals.
+        Parameters
+        ----------
+        x_name : str
+            Name of the first signal (x).
+        h_name : str
+            Name of the second signal (h).
+        num_points : int, optional
+            Number of time points for evaluation (default: self.num_points).
+        method : {'fast', 'precise'}, optional
+            Integration method for general convolution (default 'fast'):
+            - 'fast': numpy trapezoidal rule (np.trapz)
+            - 'precise': adaptive quadrature (scipy.integrate.quad)
+        show_expr : bool, optional
+            Reserved for future use.
 
-        Args:
-            x_name (str): Name of the signal x(t), previously defined via `add_signal(...)`.
-            h_name (str): Name of the signal h(t), previously defined via `add_signal(...)`.
-            num_points (int, optional): Number of time samples to compute for numerical integration. Defaults to self.num_points.
-            show_expr (bool, optional): Reserved for future use; currently unused.
+        Examples
+        --------
+        >>> sp.plot_convolution_result("x", "h", method='fast')
+        >>> sp.plot_convolution_result("x", "h", method='precise')
         """
 
         t = sp.Symbol('t')
@@ -1629,15 +1677,21 @@ class SignalPlotter:
 
         # Case 3: General convolution via numerical integration
         else:
-            x_func_tau = sp.lambdify(tau, x_tau_expr, modules=["numpy", local_dict])
+            # Estimate supports
+            support_x = self._estimate_numerical_support(x_expr, var_x, self.horiz_range, margin_multiplier=1.0)
+            support_h = self._estimate_numerical_support(h_expr, var_h, self.horiz_range, margin_multiplier=1.0)
 
-            def h_func_tau_shifted(tau_val, t_val):
-                h_t_tau = h_t_tau_expr.subs(t, t_val)
-                h_func = sp.lambdify(tau, h_t_tau, modules=["numpy", local_dict])
-                return h_func(tau_val)
+            # Prepare full symbolic integrand once
+            integrand_expr = x_expr.subs(var_x, tau) * h_expr.subs(var_h, t - tau)
+            integrand_func = sp.lambdify((tau, t), integrand_expr, modules=["numpy", local_dict])
 
-            support_x = self.horiz_range
-            support_h = self.horiz_range
+            tau_grid = np.linspace(
+                min(support_x[0], t_vals[0] - support_h[1]),
+                max(support_x[1], t_vals[-1] - support_h[0]),
+                num_points
+            )
+
+            y_vals = []
 
             for t_val in t_vals:
                 a = max(support_x[0], t_val - support_h[1])
@@ -1645,17 +1699,31 @@ class SignalPlotter:
                 if a >= b:
                     y_vals.append(0)
                     continue
-                integrand = lambda tau_val: x_func_tau(tau_val) * h_func_tau_shifted(tau_val, t_val)
+                integrand = lambda tau_val: integrand_func(tau_val, t_val)
                 try:
                     val, _ = integrate.quad(integrand, a, b)
                 except Exception:
                     val = 0
                 y_vals.append(val)
 
+            # Create interpolation function for plotting and future evaluations
+            # We computed y_vals only at discrete t_vals, but the drawing functions 
+            # may request evaluations at any t ∈ horiz_range.
+            # This avoids recomputing integrals during plot rendering:
             self.func = lambda t_: np.interp(t_, t_vals, y_vals)
+
+            # Store the t values used for this computation.
+            # This may be useful for plot ticks, axis limits, or any further processing.
+            self.t_vals = t_vals
+
+            # No closed-form expression exists for the convolution result (purely numeric case).
+            # We assign None to indicate no symbolic expression is available.
+            self.expr = None
+
+            # Clear any impulse information: no Dirac impulses exist in the general case.
             self.impulse_locs = []
             self.impulse_areas = []
-            self.expr = None
+
 
         # Final settings and plot
         self.t_vals = t_vals
