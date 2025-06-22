@@ -4,6 +4,7 @@ import sympy as sp
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 import re
 import warnings
+from matplotlib.widgets import Slider
 
 class DiscreteSignalPlotter:
     """
@@ -40,6 +41,11 @@ class DiscreteSignalPlotter:
         self.custom_labels = {}
         self.signal_periods = {}
 
+        self.signal_xticks = {}
+        self.signal_yticks = {}
+        self.signal_xtick_labels = {}
+        self.signal_ytick_labels = {}
+
         self.current_name = None
         self.horiz_range = horiz_range
         self.vert_range = vert_range
@@ -55,33 +61,39 @@ class DiscreteSignalPlotter:
         self.fraction_ticks = fraction_ticks
 
         # Preserve original tick arguments to differentiate None / [] / 'auto'
-        self.init_xticks_arg = xticks
-        self.init_yticks_arg = yticks
-
-        if isinstance(xticks, (list, tuple, np.ndarray)) and len(xticks) > 0:
-            self.xticks = np.array(xticks)
-        else:
-            self.xticks = None
-        if isinstance(yticks, (list, tuple, np.ndarray)) and len(yticks) > 0:
-            self.yticks = np.array(yticks)
-        else:
-            self.yticks = None
-        
-        # self.pi_mode = pi_mode
+        self.default_xticks_arg = xticks
+        self.default_yticks_arg = yticks
 
         self.xtick_labels = xtick_labels
         self.ytick_labels = ytick_labels
 
-        if self.xtick_labels is not None:
-            if self.xticks is None:
-                raise ValueError("xtick_labels provided without xticks positions")
-            if len(self.xtick_labels) != len(self.xticks):
-                raise ValueError("xtick_labels and xticks must have the same length")
-        if self.ytick_labels is not None:
-            if self.yticks is None:
-                raise ValueError("ytick_labels provided without yticks positions")
-            if len(self.ytick_labels) != len(self.yticks):
-                raise ValueError("ytick_labels and yticks must have the same length")
+        # self.init_xticks_arg = xticks
+        # self.init_yticks_arg = yticks
+
+        # if isinstance(xticks, (list, tuple, np.ndarray)) and len(xticks) > 0:
+        #     self.xticks = np.array(xticks)
+        # else:
+        #     self.xticks = None
+        # if isinstance(yticks, (list, tuple, np.ndarray)) and len(yticks) > 0:
+        #     self.yticks = np.array(yticks)
+        # else:
+        #     self.yticks = None
+        
+        # # self.pi_mode = pi_mode
+
+        # self.xtick_labels = xtick_labels
+        # self.ytick_labels = ytick_labels
+
+        # if self.xtick_labels is not None:
+        #     if self.xticks is None:
+        #         raise ValueError("xtick_labels provided without xticks positions")
+        #     if len(self.xtick_labels) != len(self.xticks):
+        #         raise ValueError("xtick_labels and xticks must have the same length")
+        # if self.ytick_labels is not None:
+        #     if self.yticks is None:
+        #         raise ValueError("ytick_labels provided without yticks positions")
+        #     if len(self.ytick_labels) != len(self.yticks):
+        #         raise ValueError("ytick_labels and yticks must have the same length")
 
         def is_natural(x, tol=1e-12):
             if x is None:
@@ -302,18 +314,8 @@ class DiscreteSignalPlotter:
     #         self.signal_defs[name] = parsed_expr
 
     
-    def add_signal(self, expr_str, label=None, period=None):
-        r"""
-        Adds a new signal definition to the dictionary.
-
-        Args:
-            expr_str (str): Expression like "x[n] = delta(n) + u(n-2)"
-            label (str, optional): Custom label for plotting
-            period (float, optional): Periodicity (optional)
-
-        Examples:
-            >>> dsp.add_signal("x[n] = delta(n) + delta(n-2) + u(n-3)")
-        """
+    def add_signal(self, expr_str, label=None, period=None, 
+                   xticks=None, yticks=None, xtick_labels=None, ytick_labels=None):
         m = re.match(r"(?P<name>\w+)\s*\[\s*(?P<var>\w+)\s*\]\s*=\s*(?P<expr>.+)", expr_str)
         if not m:
             raise ValueError("Expression must be in form: name[n] = ...")
@@ -324,15 +326,12 @@ class DiscreteSignalPlotter:
             self.var_symbols[var] = sp.Symbol(var)
         var_sym = self.var_symbols[var]
 
-        # Initial expression update (this includes parsing, substituting previous signals, and lambdify)
         self._update_expression_and_func(name, expr_body, var_sym)
         self.var_symbols[name] = var_sym
 
-        # Store custom label
         if label is not None:
             self.custom_labels[name] = label
 
-        # If periodic, expand as periodic sum
         if period is not None:
             self.signal_periods[name] = period
 
@@ -341,10 +340,13 @@ class DiscreteSignalPlotter:
             k_range = range(-num_periods - 2, num_periods + 3)
 
             expanded_expr = sum(self.signal_defs[name].subs(var_sym, var_sym - period * k) for k in k_range)
-
-            # Update expression again after expansion
             self.signal_defs[name] = expanded_expr
             self._update_expression_and_func(name, str(expanded_expr), var_sym)
+
+        self.signal_xticks[name] = xticks if xticks is not None else self.default_xticks_arg
+        self.signal_yticks[name] = yticks if yticks is not None else self.default_yticks_arg
+        self.signal_xtick_labels[name] = xtick_labels if xtick_labels is not None else self.xtick_labels
+        self.signal_ytick_labels[name] = ytick_labels if ytick_labels is not None else self.ytick_labels
 
     def draw_function(self, marker='o', stem_color=None, marker_size=6, line_width=3):
         """
@@ -401,6 +403,9 @@ class DiscreteSignalPlotter:
         if draw_right:
             self.ax.text(n1 + delta, y_mid, r'$\cdots$', ha='right', va='center',
                          color=self.color, fontsize=14, zorder=10)
+        
+        return markerline, stemlines
+
 
     def _prepare_plot(self, y_vals):
         """
@@ -512,7 +517,7 @@ class DiscreteSignalPlotter:
                                          mutation_scale=12, mutation_aspect=2, fc='black'))
         
         # Prevent labels from being clipped
-        self.fig.tight_layout()
+        # self.fig.tight_layout()
 
     def draw_ticks(self, xticks=None, yticks=None, xtick_labels='auto', ytick_labels='auto', tick_size_px=None, tol=1e-12):
         """
@@ -541,7 +546,7 @@ class DiscreteSignalPlotter:
                 name = self.current_name
             if name not in self.signal_defs:
                 raise ValueError(f"Signal '{name}' is not defined.")
-            if not hasattr(self, 'n_vals') or not hasattr(self, 'y_vals') or self.func_name != name:
+            if not hasattr(self, 'n_vals') or not hasattr(self, 'y_vals') or self.current_name != name:
                 self.plot(name)
                 plt.close(self.fig)
             positions = []
@@ -728,20 +733,6 @@ class DiscreteSignalPlotter:
             return result
         return wrapped
     
-    def discrete_upsampling_wrapper(self, func, factor, offset=0):
-        """
-        Wraps the lambdified function to simulate upsampling behavior with optional offset.
-        If (n - offset) is multiple of factor, evaluates func((n - offset)//factor), else returns 0.
-        """
-        def wrapped(n):
-            n = np.asarray(n)
-            result = np.zeros_like(n, dtype=float)
-            mask = ((n - offset) % factor == 0)
-            valid_n = ((n - offset) // factor)[mask]
-            result[mask] = func(valid_n)
-            return result
-        return wrapped
-    
     def _update_expression_and_func(self, name, expr_body, var_sym):
         """
         Parses and updates the symbolic expression and numeric function
@@ -869,7 +860,7 @@ class DiscreteSignalPlotter:
             raise ValueError(f"Signal '{name}' is not defined.")
 
         self.current_name = name
-        self.func_name = name
+        # self.func_name = name
 
         expr = self.signal_defs[name]
         var = self.var_symbols[name]
@@ -898,9 +889,238 @@ class DiscreteSignalPlotter:
 
         # Create figure
         self.fig, self.ax = plt.subplots(figsize=self.figsize)
+        self.fig.tight_layout()
+        plt.subplots_adjust(bottom=0.15, top=0.95, hspace=0.4)
+
         self.setup_axes()
         self.draw_function()
 
+        xticks = self.signal_xticks.get(name, 'auto')
+        yticks = self.signal_yticks.get(name, 'auto')
+        xtick_labels = self.signal_xtick_labels.get(name, 'auto')
+        ytick_labels = self.signal_ytick_labels.get(name, 'auto')
+        self.draw_ticks(xticks=xticks, yticks=yticks, xtick_labels=xtick_labels, ytick_labels=ytick_labels)
+
+        self.draw_labels()
+        self.show()
+
+    def _estimate_discrete_support(self, expr, var, horiz_range, margin_multiplier=1.0):
+        """
+        Estimate the true support of a signal numerically by evaluating the function
+        over an extended range and detecting where it is significantly nonzero.
+
+        Parameters
+        ----------
+        expr : sympy.Expr
+            The symbolic expression of the signal.
+        var : sympy.Symbol
+            The variable of the expression (t or tau or others).
+        horiz_range : tuple
+            The current horizontal range.
+        margin_multiplier : float
+            Factor to extend the range for safety.
+
+        Returns
+        -------
+        tuple :
+            Estimated (min, max) support where the signal is not negligible.
+        """
+        margin = margin_multiplier * (horiz_range[1] - horiz_range[0])
+        search_range = (horiz_range[0] - margin, horiz_range[1] + margin + 1)
+
+        n_vals = np.arange(*search_range)
+        func = sp.lambdify(var, expr, modules=[self._get_numeric_dict()])
+        y_vals = np.abs(func(n_vals))
+
+        threshold = np.max(y_vals) * 1e-3
+        nonzero_indices = np.where(y_vals > threshold)[0]
+
+        if len(nonzero_indices) == 0:
+            return (0, 0)
+        
+        min_index = nonzero_indices[0]
+        max_index = nonzero_indices[-1]
+        return (n_vals[min_index], n_vals[max_index])
+    
+    def plot_convolution(self, x_name, h_name, output_name=None, horiz_range=None, margin_multiplier=1.0):
+        """
+        Computes and plots the discrete convolution y[n] = (x * h)[n] between two signals (purely numeric version).
+
+        Parameters:
+        x_name : str
+            Name of the first signal.
+        h_name : str
+            Name of the second signal.
+        output_name : str, optional
+            Name to assign to the output convolution signal.
+        horiz_range : tuple, optional
+            Range of n values to compute the convolution.
+        """
+        import numpy as np
+
+        # Retrieve variables and expressions
+        var_x = self.var_symbols[x_name]
+        var_h = self.var_symbols[h_name]
+        expr_x = self.signal_defs[x_name]
+        expr_h = self.signal_defs[h_name]
+
+        # Estimate supports
+        support_x = self._estimate_discrete_support(expr_x, var_x, self.horiz_range, margin_multiplier)
+        support_h = self._estimate_discrete_support(expr_h, var_h, self.horiz_range, margin_multiplier)
+
+        n_min_x, n_max_x = support_x
+        n_min_h, n_max_h = support_h
+
+        n_vals_x = np.arange(n_min_x, n_max_x + 1)
+        n_vals_h = np.arange(n_min_h, n_max_h + 1)
+    
+        # Evaluate signals numerically
+        x_vals = self.funcs[x_name](n_vals_x)
+        h_vals = self.funcs[h_name](n_vals_h)
+
+        # Perform full discrete convolution
+        y_vals_full = np.convolve(x_vals, h_vals, mode='full')
+
+        # Determine new n range after convolution
+        n_start = n_min_x + n_min_h
+        n_end = n_max_x + n_max_h
+        n_vals_conv = np.arange(n_start, n_end + 1)
+
+        # Register result as new signal (only numeric, no symbolic expression)
+        if output_name is None:
+            output_name = "y"
+        else:
+            output_name = re.sub(r"\[.*?\]", "", output_name)
+          
+        self.signal_defs[output_name] = None    # No symbolic expression
+        conv_dict = dict(zip(n_vals_conv, y_vals_full))
+        self.funcs[output_name] = lambda n: np.array([conv_dict.get(k, 0.0) for k in np.atleast_1d(n)])
+        self.var_symbols[output_name] = sp.Symbol('n', integer=True)
+        self.current_name = output_name # Set as current active signal
+
+        # Use requested plot range
+        if horiz_range is None:
+            horiz_range = self.horiz_range
+
+        self.signal_xticks[output_name] = 'auto'
+        self.signal_yticks[output_name] = 'auto'
+        self.signal_xtick_labels[output_name] = None
+        self.signal_ytick_labels[output_name] = None
+
+        self.n_vals = np.arange(horiz_range[0], horiz_range[1] + 1)
+        self.y_vals = self.funcs[output_name](self.n_vals)
+        self._prepare_plot(self.y_vals)
+
+        self.xlabel = "n"
+        self.ylabel = rf"{output_name}[n]"
+
+        # Ensure current_name is fully consistent for downstream plotting
+        if hasattr(self, 'init_xticks_arg'):
+            self.init_xticks_arg = None  # Disable old cached ticks for new signal
+
+        self.fig, self.ax = plt.subplots(figsize=self.figsize)
+        self.fig.tight_layout()
+        plt.subplots_adjust(bottom=0.15, top=0.95, hspace=0.4)
+
+        self.setup_axes()
+        self.draw_function()
         self.draw_ticks()
         self.draw_labels()
         self.show()
+
+    def plot_convolution_steps(self, x_name, h_name, n_actual):
+        n_min, n_max = self.horiz_range
+        k_vals = np.arange(n_min, n_max + 1)
+
+        x_vals = self.funcs[x_name](k_vals)
+        h_vals = self.funcs[h_name](k_vals)
+        h_shifted_vals = self.funcs[h_name](n_actual - k_vals)
+        product_vals = x_vals * h_shifted_vals
+
+        signals = [
+            (k_vals, h_vals, rf"{h_name}[k]"),
+            (k_vals, x_vals, rf"{x_name}[k]"),
+            (k_vals, h_shifted_vals, rf"{h_name}[n-k]"),
+            (k_vals, product_vals, rf"{x_name}[k]{h_name}[n-k]")
+        ]
+
+        for idx, (k, y, label) in enumerate(signals, 1):
+            self.n_vals = k
+            self.y_vals = y
+            self.xlabel = "k"
+            self.ylabel = label
+
+            self._prepare_plot(self.y_vals)
+            self.fig, self.ax = plt.subplots(figsize=self.figsize)
+            self.fig.tight_layout()
+            plt.subplots_adjust(bottom=0.15, top=0.95, hspace=0.4)
+
+            self.current_name = '__temp_convolution__'
+            self.signal_defs[self.current_name] = None  # No hace falta expresión simbólica
+            self.funcs[self.current_name] = lambda n: np.interp(n, self.n_vals, self.y_vals, left=0, right=0)
+            self.var_symbols[self.current_name] = sp.Symbol('n', integer=True)
+            
+            self.setup_axes()
+            self.draw_function()
+            self.draw_ticks()
+            self.draw_labels()
+            self.show()
+
+    def convolution_anim(self, x_name, h_name):
+        n_min, n_max = self.horiz_range
+        k_vals = np.arange(n_min, n_max + 1)
+        x_vals = self.funcs[x_name](k_vals)
+        h_vals = self.funcs[h_name](k_vals)
+        h_shifted_vals_init = self.funcs[h_name](n_min - k_vals)
+        h_shifted_forward_init = self.funcs[h_name](k_vals + n_min)
+        product_vals_init = x_vals * h_shifted_vals_init
+
+        signals = [
+            (k_vals, x_vals, rf"{x_name}[k]"),
+            (k_vals, h_vals, rf"{h_name}[k]"),
+            (k_vals, h_shifted_vals_init, rf"{h_name}[n-k]"),
+            (k_vals, h_shifted_forward_init, rf"{h_name}[k+n]"),
+            (k_vals, product_vals_init, rf"{x_name}[k]{h_name}[n-k]")
+        ]
+
+        figs, axs = plt.subplots(3, 2, figsize=(self.figsize[0]*2, self.figsize[1]*3))
+        plt.subplots_adjust(bottom=0.15, top=0.95, hspace=0.5, wspace=0.4)
+
+        positions = [(0,0), (0,1), (1,0), (1,1), (2,0)]
+        markers = []
+        for (row, col), (k, y, label) in zip(positions, signals):
+            ax = axs[row, col]
+            self.ax = ax
+            self.n_vals = k
+            self.y_vals = y
+            self.xlabel = "k"
+            self.ylabel = label
+
+            self._prepare_plot(self.y_vals)
+            self.current_name = '__temp_convolution__'
+            self.signal_defs[self.current_name] = None
+            self.funcs[self.current_name] = lambda n: np.interp(n, self.n_vals, self.y_vals, left=0, right=0)
+            self.var_symbols[self.current_name] = sp.Symbol('n', integer=True)
+
+            self.setup_axes()
+            markerline, stemlines = self.draw_function()
+            self.draw_ticks()
+            self.draw_labels()
+            markers.append((ax, markerline, stemlines, k))
+
+        ax_slider = plt.axes([0.25, 0.02, 0.5, 0.03])
+        slider = Slider(ax_slider, 'n', n_min, n_max, valinit=n_min, valstep=1)
+
+        def update(n_actual):
+            h_shifted_vals = self.funcs[h_name](n_actual - k_vals)
+            h_shifted_forward = self.funcs[h_name](k_vals + n_actual)
+            product_vals = x_vals * h_shifted_vals
+            updates = [x_vals, h_vals, h_shifted_vals, h_shifted_forward, product_vals]
+            for (ax, markerline, stemlines, n_vals_i), new_y in zip(markers, updates):
+                markerline.set_data(n_vals_i, new_y)
+                segments = [ [(n, 0), (n, y)] for n, y in zip(n_vals_i, new_y) ]
+                stemlines.set_segments(segments)
+            figs.canvas.draw_idle()
+
+        slider.on_changed(update)
+        plt.show()

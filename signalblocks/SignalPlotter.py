@@ -1554,7 +1554,7 @@ class SignalPlotter:
         return (t_vals[min_index], t_vals[max_index])
 
 
-    def plot_convolution_result(self, x_name, h_name, num_points=None, show_expr=False):
+    def plot_convolution(self, x_name, h_name, num_points=None, show_expr=False):
         """
         Compute and plot the convolution result y(t) = (x * h)(t) between two signals x(t) and h(t).
 
@@ -1578,8 +1578,8 @@ class SignalPlotter:
 
         Examples
         --------
-        >>> sp.plot_convolution_result("x", "h", method='fast')
-        >>> sp.plot_convolution_result("x", "h", method='precise')
+        >>> sp.plot_convolution("x", "h", method='fast')
+        >>> sp.plot_convolution("x", "h", method='precise')
         """
 
         t = sp.Symbol('t')
