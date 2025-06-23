@@ -280,6 +280,8 @@ class DiscreteSignalPlotter:
             self.var_symbols[output_name] = sp.Symbol('n', integer=True)
             self.signal_xticks[output_name] = xticks if xticks is not None else self.default_xticks
             self.signal_yticks[output_name] = yticks if yticks is not None else self.default_yticks
+            self.signal_xticks_delta[output_name] = xticks_delta if xticks_delta is not None else self.default_xticks_delta
+            self.signal_yticks_delta[output_name] = yticks_delta if yticks_delta is not None else self.default_yticks_delta
             self.signal_xtick_labels[output_name] = xtick_labels if xtick_labels is not None else self.default_xtick_labels
             self.signal_ytick_labels[output_name] = ytick_labels if ytick_labels is not None else self.default_ytick_labels
             return  # Termina aquí porque ya hemos registrado la convolución
@@ -1039,17 +1041,26 @@ class DiscreteSignalPlotter:
         h_shifted_vals = self.funcs[h_name](n_actual - k_vals)
         product_vals = x_vals * h_shifted_vals
 
+        # Compute full convolution result
+        n_conv_raw, y_conv_raw = self.convolution(x_name, h_name)
+
+        # Build full convolution over horiz_range
+        n_conv = np.arange(n_min, n_max + 1)
+        conv_dict = dict(zip(n_conv_raw, y_conv_raw))
+        y_conv = np.array([conv_dict.get(n, 0.0) for n in n_conv])
+
         signals = [
-            (k_vals, h_vals, rf"{h_name}[k]", h_name),
-            (k_vals, x_vals, rf"{x_name}[k]", x_name),
-            (k_vals, h_shifted_vals, rf"{h_name}[n-k]", h_name),
-            (k_vals, product_vals, rf"{x_name}[k]{h_name}[n-k]", None)
+            (k_vals, h_vals, rf"{h_name}[k]", h_name, False, False),
+            (k_vals, x_vals, rf"{x_name}[k]", x_name, False, False),
+            (k_vals, h_shifted_vals, rf"{h_name}[n-k]", h_name, True, True),
+            (k_vals, product_vals, rf"{x_name}[k]{h_name}[n-k]", None, True, True),
+            (n_conv, y_conv, rf"{x_name}*{h_name}", None, False, False)
         ]
 
-        for k, y, label, ref_name in signals:
+        for k, y, label, ref_name, shifted, annotate in signals:
             self.n_vals = k
             self.y_vals = y
-            self.xlabel = "k"
+            self.xlabel = "k" if label != rf"{x_name}*{h_name}" else "n"
             self.ylabel = label
 
             self._prepare_plot(self.y_vals)
@@ -1065,25 +1076,69 @@ class DiscreteSignalPlotter:
             self.setup_axes()
             self.draw_function()
 
-            # Ajustar xticks desplazados para señales desplazadas
-            if ref_name and ref_name in self.signal_xticks and self.signal_xticks[ref_name] not in [None, 'auto']:
-                orig_xticks = self.signal_xticks[ref_name]
-                shifted_xticks = [n_actual - v for v in orig_xticks]
-                shifted_labels = []
-                for v in orig_xticks:
-                    delta = n_actual - v
-                    if delta == 0:
-                        label_str = "n"
-                    elif delta > 0:
-                        label_str = f"n+{delta}"
+            # Draw continuation dots if values exist beyond horiz_range
+            tol = 1e-12
+            delta = (n_max - n_min) * 0.1
+            y_left = self.funcs[self.current_name](np.arange(n_min - 10, n_min))
+            y_right = self.funcs[self.current_name](np.arange(n_max + 1, n_max + 11))
+            y_mid = (self.y_min + self.y_max) / 2
+            if np.any(np.abs(y_left) > tol):
+                self.ax.text(n_min - delta, y_mid, r'$\cdots$', ha='left', va='center',
+                            color=self.color, fontsize=14, zorder=10)
+            if np.any(np.abs(y_right) > tol):
+                self.ax.text(n_max + delta, y_mid, r'$\cdots$', ha='right', va='center',
+                            color=self.color, fontsize=14, zorder=10)
+
+            if ref_name and ref_name in self.signal_xticks:
+                xticks_def = self.signal_xticks[ref_name]
+                xtick_labels_def = self.signal_xtick_labels.get(ref_name, None)
+                if shifted:
+                    if xticks_def is None or xticks_def == 'auto':
+                        self.draw_ticks(xticks=[n_actual], xtick_labels=['n'])
+                    elif isinstance(xticks_def, (list, tuple)):
+                        shifted_xticks = [n_actual - v for v in xticks_def]
+                        shifted_labels = []
+                        for i, v in enumerate(xticks_def):
+                            delta_shift = n_actual - v
+                            if delta_shift == 0:
+                                label_str = "n"
+                            elif delta_shift > 0:
+                                label_str = f"n+{delta_shift}"
+                            else:
+                                label_str = f"n{delta_shift}"
+                            shifted_labels.append(label_str)
+                        self.draw_ticks(xticks=shifted_xticks, xtick_labels=shifted_labels)
                     else:
-                        label_str = f"n{delta}"  # delta ya es negativo
-                    shifted_labels.append(label_str)
-                self.draw_ticks(xticks=shifted_xticks, xtick_labels=shifted_labels)
+                        self.draw_ticks(xticks=[n_actual], xtick_labels=['n'])
+                else:
+                    self.draw_ticks(xticks=xticks_def, xtick_labels=xtick_labels_def)
             else:
                 self.draw_ticks()
+
             self.draw_labels()
+            
+            if annotate:
+                x_lim = self.ax.get_xlim()
+                y_lim = self.ax.get_ylim()
+                self.ax.text(x_lim[1] * 0.95, y_lim[1] * 0.95, f"n={n_actual}", fontsize=12, ha='right', va='top')
+            
+            # # Mark n_actual point on convolution plot
+            # if label == rf"{x_name}*{h_name}":
+            #     if n_actual in k:
+            #         idx = np.where(k == n_actual)[0][0]
+            #         y_val = y[idx]
+            #         self.ax.plot(n_actual, y_val, 'o', color='blue', markersize=10)
+
             self.show()
+
+            # conv_signal_name = f"temp_conv_{x_name}_{h_name}"
+            self.add_signal(f"temp[n]=conv({x_name}[n], {h_name}[n])", label='y')
+            self.plot('temp')
+
+            # del self.signal_defs[y]
+            # del self.funcs[y]
+            # del self.var_symbols[y]
+
 
     def convolution_anim(self, x_name, h_name):
         n_min, n_max = self.horiz_range
