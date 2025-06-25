@@ -371,7 +371,7 @@ class DiscreteSignalPlotter:
         plt.setp(stemlines, linewidth=line_width)
 
         n0, n1 = self.horiz_range
-        delta = (n1 - n0) * 0.1
+        delta = (n1 - n0) * 0.05
 
         expr = self.signal_defs[self.current_name]
         var = self.var_symbols[self.current_name]
@@ -393,7 +393,8 @@ class DiscreteSignalPlotter:
         draw_left = np.sum(np.abs(y_left)) > tol
         draw_right = np.sum(np.abs(y_right)) > tol
 
-        y_mid = (self.y_min + self.y_max) / 2
+        # y_mid = (self.y_min + self.y_max) / 2
+        y_mid = self.y_max / 2
         if draw_left:
             self.ax.text(n0 - delta, y_mid, r'$\cdots$', ha='left', va='center',
                          color=self.color, fontsize=14, zorder=10)
@@ -487,7 +488,7 @@ class DiscreteSignalPlotter:
         x0, x1 = horiz_range
         x_range = x1 - x0
         # You can adjust this value if needed
-        x_margin = 0.2 * x_range
+        x_margin = 0.05 * x_range
 
         # Use vertical range computed in _prepare_plot
         y_min, y_max = self.y_min, self.y_max

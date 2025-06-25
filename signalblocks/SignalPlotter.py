@@ -80,7 +80,8 @@ class SignalPlotter:
         fraction_ticks=False,
         save_path=None, 
         show_plot=True,
-        color='black', 
+        color='black',
+        linestyle='--', 
         alpha=0.5 
     ):
         """
@@ -97,6 +98,7 @@ class SignalPlotter:
         self.figsize = figsize
         self.tick_size_px = tick_size_px
         self.color = color
+        self.linestyle =linestyle
         self.alpha = alpha
         self.period = period
         self.save_path = save_path
@@ -535,7 +537,7 @@ class SignalPlotter:
             y_plot = np.full_like(t_plot, y_plot, dtype=float)
 
         # Plot curve
-        self.ax.plot(t_plot, y_plot, color=self.color, linewidth=2.5, zorder=5)
+        self.ax.plot(t_plot, y_plot, color=self.color, linewidth=2.5, linestyle=self.linestyle, zorder=5)
 
         # Decide whether to draw ellipsis
         delta = (t1 - t0) * 0.05
