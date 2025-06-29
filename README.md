@@ -453,13 +453,100 @@ sp.plot("H_abs")
 ### Basic Signal Plotting
 
 ```python
-from signalblocks import SignalPlotter
+from signalblocks import DiscreteSignalPlotter
 
-SignalPlotter("x(t)=rect(n-1)", horiz_range=(-2, 2)).plot()
+dsp = DiscreteSignalPlotter(save_path='discrete_signal1.png')
+dsp.add_signal("x[n]=rect(n-1)")
+dsp.plot()
 ```
-
 ![Signal Plot](docs/notebooks/discrete_signal1.png)
 
+### Impulses and Composition
+
+```python
+from signalblocks import DiscreteSignalPlotter
+
+dsp = DiscreteSignalPlotter(figsize=[16, 4], xticks='auto', horiz_range=(-5, 10), yticks='fit')
+
+dsp.add_signal("x[n]=delta[n+4]")
+dsp.add_signal("x2[n]=delta[n-2]+u[n]")
+dsp.add_signal("x3[n]=x[n]-x2[n]")
+dsp.plot("x3")
+```
+![Signal Plot](docs/notebooks/discrete_signal2.png)
+
+### Periodic Signal
+
+```python
+from signalblocks import DiscreteSignalPlotter
+
+dsp = DiscreteSignalPlotter(horiz_range=(-10, 10), yticks='fit', fraction_ticks=True)
+
+dsp.add_signal("x[n] = tri(n)", period=10)
+dsp.plot("x")
+```
+
+![Signal Plot](docs/notebooks/discrete_signal3.png)
+
+### Piecewise Defined Signal
+
+```python
+from signalblocks import SignalPlotter
+import numpy as np
+
+signal1 = SignalPlotter(horiz_range=[-2.5, 2.5], xticks=np.linspace(-2, 2, 9), color='blue',save_path='signal5.png')
+signal1.add_signal("x(t)=pw((t**2, (t>-1) & (t<0)), (-t, (t>=0) & (t<1)), (0, True))", period=2)
+signal1.plot('x')
+```
+
+![Signal Plot](docs/notebooks/discrete_signal4.png)
+
+### Decimation and Zero Insertion
+
+```python
+from signalblocks import DiscreteSignalPlotter
+import numpy as np
+
+dsp = DiscreteSignalPlotter(horiz_range=(-10, 10), figsize=(10, 4))
+
+dsp.add_signal("x[n] = tri[n]")
+dsp.add_signal('x_dec[n]=x[2*n]', label='x_{dec}[n]')
+dsp.add_signal('x_ups[n]=x[n/2]', label='x_{ups}[n]')
+dsp.zero_insertion("x", factor=2, new_name="x_0ins", label="x_{0ins}[n]")
+dsp.plot('x')
+dsp.plot('x_dec')
+dsp.plot('x_ups')
+dsp.plot('x_0ins')
+
+```
+![Signal Plot](docs/notebooks/discrete_signal5.png)
+![Signal Plot](docs/notebooks/discrete_signal6.png)
+![Signal Plot](docs/notebooks/discrete_signal7.png)
+![Signal Plot](docs/notebooks/discrete_signal8.png)
+
+### Convolution Examples
+
+```python
+from signalblocks import DiscreteSignalPlotter
+
+dsp = DiscreteSignalPlotter(horiz_range=(-10, 10), xticks='auto', figsize=(8, 3))
+
+dsp.add_signal("x[n] = rect(n)")
+dsp.add_signal("h[n] = u(n+2)")
+dsp.plot_convolution_steps("h", "x", n_actual=2)
+dsp.add_signal("y[n]=conv(x[n], h[n])")
+dsp.plot('y')
+```
+
+![Signal Plot](docs/notebooks/discrete_convolution_example1.png)
+![Signal Plot](docs/notebooks/discrete_convolution_example2.png)
+![Signal Plot](docs/notebooks/discrete_convolution_example3.png)
+![Signal Plot](docs/notebooks/discrete_convolution_example4.png)
+![Signal Plot](docs/notebooks/discrete_convolution_example5.png)
+
+### Additional Examples
+
+[Additional examples notebook 1](docs/notebooks/discrete_signal_examples.ipynb)
 
 ## 🔵 Z-Transform Complex Plane Visualization Examples
 

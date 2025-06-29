@@ -166,7 +166,7 @@ class DiscreteSignalPlotter:
             'u':            sp.Function('u'),
             # 'rect':         lambda n: sp.Piecewise((1, abs(n) <= 1), (0, True)),
             'rect':         sp.Function('rect'),
-            'tri':          sp.Function('tri'),
+            'tri':          lambda n: sp.Piecewise((1 - sp.Abs(n)/3, sp.Abs(n) <= 3), (0, True)),
             # 'tri':          lambda n: sp.Piecewise((1 - abs(n)/3, abs(n) <= 3), (0, True)),
             'ramp':         sp.Function('ramp'),
             # 'ramp':         lambda n: sp.Piecewise((n, n >= 0), (0, True)),
@@ -206,7 +206,9 @@ class DiscreteSignalPlotter:
             'im': np.imag,
             'conj': np.conj,
             'arg': np.angle,
-            'pi': np.pi
+            'pi': np.pi,
+            'And': np.logical_and,
+            'Or': np.logical_or,
         }
         return d
     
@@ -724,20 +726,29 @@ class DiscreteSignalPlotter:
         y_pos = y_lim[1] - 0.1 * (y_lim[1] - y_lim[0])
         self.ax.text(x_pos, y_pos, rf'${self.ylabel}$', fontsize=fontsize, ha='left', va='bottom', rotation=0)
 
-    def discrete_upsampling_wrapper(self, func, factor, offset=0):
-        """
-        Wraps the lambdified function to simulate upsampling behavior with optional offset.
-        If (n - offset) is multiple of factor, evaluates func((n - offset)//factor), else returns 0.
-        """
-        def wrapped(n):
-            n = np.asarray(n)
-            result = np.zeros_like(n, dtype=float)
-            mask = ((n - offset) % factor == 0)
-            valid_n = ((n - offset) // factor)[mask]
-            result[mask] = func(valid_n)
-            return result
-        return wrapped
-    
+    # def discrete_upsampling_wrapper(self, func, factor, offset=0):
+    #     """
+    #     Returns a wrapped function for upsampling by inserting zeros.
+    #     Evaluates func((n - offset)//factor) only when (n - offset) % factor == 0, else returns 0.
+    #     """
+    #     def wrapped(n):
+    #         n = np.asarray(n)
+    #         # Create mask for positions where (n - offset) is divisible by factor
+    #         valid_mask = ((n - offset) % factor == 0)
+            
+    #         # Prepare indices for evaluation, setting invalid positions to a neutral value (e.g., 0)
+    #         valid_n = np.zeros_like(n)
+    #         valid_n[valid_mask] = ((n[valid_mask] - offset) // factor)
+            
+    #         # Evaluate the function on the full array, but only positions in valid_mask will be meaningful
+    #         evaluated = func(valid_n.astype(int))
+            
+    #         # Force zeros in positions not matching the valid_mask
+    #         evaluated[~valid_mask] = 0
+            
+    #         return evaluated
+    #     return wrapped
+  
     def _update_expression_and_func(self, name, expr_body, var_sym):
         """
         Parses and updates the symbolic expression and numeric function
@@ -778,8 +789,8 @@ class DiscreteSignalPlotter:
         self.signal_defs[name] = parsed_expr
 
         # Create numerical function using numeric_dict
-        # func = sp.lambdify(var_sym, parsed_expr, modules=["numpy", self._get_numeric_dict()])
-        func = sp.lambdify(var_sym, parsed_expr, modules=[self._get_numeric_dict()])
+        func = sp.lambdify(var_sym, parsed_expr, modules=["numpy", self._get_numeric_dict()])
+        # func = sp.lambdify(var_sym, parsed_expr, modules=[self._get_numeric_dict()])
 
         # Analyze upsampling pattern from original (non-expanded) expression
         factor = None
@@ -790,21 +801,61 @@ class DiscreteSignalPlotter:
         # Define which functions are discrete-only (subject to upsampling)
         discrete_functions = {'delta', 'u', 'rect', 'tri', 'ramp'}
 
-        for f in original_expr.atoms(sp.Function):
-            # Allow primitives and user-defined functions
-            if f.func.__name__ in discrete_functions or f.func.__name__ in self.signal_defs:
-                arg = f.args[0]
-                match = arg.match(pattern)
-                if match and match[a].is_Rational and match[a].q > 1:
-                    factor = match[a].q
-                    offset = int(match[b] * factor)
-                    break
+        # for f in original_expr.atoms(sp.Function):
+        #     # Allow primitives and user-defined functions
+        #     if f.func.__name__ in discrete_functions or f.func.__name__ in self.signal_defs:
+        #         arg = f.args[0]
+        #         match = arg.match(pattern)
+        #         if match and match[a].is_Rational and match[a].q > 1:
+        #             factor = match[a].q
+        #             offset = int(match[b] * factor)
+        #             break
 
-        if factor:
-            func = self.discrete_upsampling_wrapper(func, factor, offset)
+        # if factor:
+        #     func = self.discrete_upsampling_wrapper(func, factor, offset)
 
         self.funcs[name] = func
 
+    def zero_insertion(self, base_name, factor=2, offset=0, new_name=None, label=None,
+                        xticks=None, yticks=None, xtick_labels=None, ytick_labels=None,
+                        xticks_delta=None, yticks_delta=None):
+        """
+        Adds an upsampled version of a defined signal by a given factor with insertion of zeros.
+        
+        Args:
+            base_name (str): Name of the previously defined signal to upsample.
+            factor (int): Upsampling factor L (default 2).
+            offset (int): Optional offset for alignment (default 0).
+            new_name (str, optional): Name for the new upsampled signal (default: base_name + "_upsampled").
+            label (str, optional): Label for plotting (optional).
+        """
+        if base_name not in self.funcs:
+            raise ValueError(f"Signal '{base_name}' not found for upsampling.")
+        
+        func = self.funcs[base_name]
+        
+        def upsampled_func(n):
+            n = np.asarray(n)
+            result = np.zeros_like(n, dtype=float)
+            mask = ((n - offset) % factor == 0)
+            downsampled_n = ((n - offset) // factor)[mask]
+            result[mask] = func(downsampled_n)
+            return result
+
+        if new_name is None:
+            new_name = f"{base_name}_upsampled_{factor}"
+        self.funcs[new_name] = upsampled_func
+        self.signal_defs[new_name] = None
+        self.var_symbols[new_name] = sp.Symbol('n', integer=True)
+        self.custom_labels[new_name] = label if label else f"{base_name}[n] ↑{factor}"
+
+        # Store ticks with proper inheritance
+        self.signal_xticks[new_name] = xticks if xticks is not None else self.default_xticks
+        self.signal_yticks[new_name] = yticks if yticks is not None else self.default_yticks
+        self.signal_xtick_labels[new_name] = xtick_labels if xtick_labels is not None else self.default_xtick_labels
+        self.signal_ytick_labels[new_name] = ytick_labels if ytick_labels is not None else self.default_ytick_labels
+        self.signal_xticks_delta[new_name] = xticks_delta if xticks_delta is not None else self.default_xticks_delta
+        self.signal_yticks_delta[new_name] = yticks_delta if yticks_delta is not None else self.default_yticks_delta
 
     def show(self):
         """
@@ -1132,9 +1183,9 @@ class DiscreteSignalPlotter:
 
             self.show()
 
-            # conv_signal_name = f"temp_conv_{x_name}_{h_name}"
-            self.add_signal(f"temp[n]=conv({x_name}[n], {h_name}[n])", label='y')
-            self.plot('temp')
+        # # conv_signal_name = f"temp_conv_{x_name}_{h_name}"
+        # self.add_signal(f"temp[n]=conv({x_name}[n], {h_name}[n])", label='y')
+        # self.plot('temp')
 
             # del self.signal_defs[y]
             # del self.funcs[y]

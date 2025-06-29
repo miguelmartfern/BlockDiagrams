@@ -81,7 +81,7 @@ class SignalPlotter:
         save_path=None, 
         show_plot=True,
         color='black',
-        linestyle='--', 
+        linestyle='-', 
         alpha=0.5 
     ):
         """
