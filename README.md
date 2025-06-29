@@ -19,13 +19,21 @@ Version **2.1** allows to represent comple plane poles, zeros, ROCs of Z transfo
 - Support for vertical and angled branches.
 - Feedback loops with automatic positioning.
 
-### 📈 Signal Plotting & Symbolic Operations
+### 📈 Continuous Signal Plotting & Symbolic Operations
 - Define signals symbolically: `"x(t)=rect(t-1)"`, `"x(t)=2*delta(t-1)"`, etc.
 - Plot continuous-time signals with arrows, units, and impulses.
-- Built-in primitives: `rect(t)`, `tri(t)`, `delta(t)`, `u(t)`, `sinc(t)`...
+- Built-in primitives: `rect(t)`, `tri(t)`, `ramp(t)`, `delta(t)`, `u(t)`, `sinc(t)`...
 - Combine, scale, delay, flip and modulate signals.
 - Convolution visualization: step-by-step and final result.
 - Periodic extensions and delta scaling support.
+
+### 📈 Discrete Signal Plotting & Symbolic Operations
+- Define signals symbolically: `"x[n]=sin(pi*n/2)"`, `"x[n]=2*delta[n-1]"`, etc.
+- Plot discrete-time signals with arrows, units, and discrete impulses.
+- Built-in primitives: `rect[n]`, `tri[n]`, `ramp[n]`, `delta[n]`, `u[n]`, `sinc[n]`...
+- Combine, scale, delay, flip, decimate and insertion of zeros.
+- Convolution visualization: step-by-step and final result.
+- Periodic extensions.
 
 ### 🔵 Z-Transform Complex Plane Visualization (ComplexPlane)
 - Display Z-transform Region of convergence (ROC):
@@ -265,7 +273,7 @@ db.show(savepath = "feedback_diagram.png")
 
 ---
 
-## 📊 Signal Examples
+## 📊 Continuous Signal Examples
 
 ### Basic Signal Plotting
 
@@ -440,6 +448,19 @@ sp.plot("H_abs")
 
 [Additional examples notebook 1](docs/notebooks/signal_examples.ipynb)
 
+## 📊 Discrete Signal Examples
+
+### Basic Signal Plotting
+
+```python
+from signalblocks import SignalPlotter
+
+SignalPlotter("x(t)=rect(n-1)", horiz_range=(-2, 2)).plot()
+```
+
+![Signal Plot](docs/notebooks/discrete_signal1.png)
+
+
 ## 🔵 Z-Transform Complex Plane Visualization Examples
 
 ```python
@@ -516,6 +537,13 @@ cp.show("complex_plane2.png")
 - `plot_convolution_result(...)`: Plot the result of convolution.
 - `plot_convolution_view(...)`: Show intermediate signals like `x(t−τ)`.
 
+### `DiscreteSignalPlotter`
+- `add_signal(...)`: Add a symbolic signal definition.
+- `plot(...)`: Plot a single signal.
+- `plot_convolution_steps(...)`: Visualize `x[k]`, `h[n-k]`, etc.
+- `plot_convolution(...)`: Plot the result of convolution.
+- `convolution_anim(...)`: Plot an animation of convolution.
+
 ### `ComplexPlane`
 - `draw_poles_and_zeros(...)`: Plot poles (×) and zeros (○), supporting multiplicity.
 - `draw_ROC(...)`: Draw Region of Convergence with conditions like |z|<a, |z|>a, or a<|z|<b.
@@ -528,6 +556,11 @@ cp.show("complex_plane2.png")
 
 ## 🕰️ Version History
 
+### v2.2
+- New module `DiscreteSignalPlotter` with symbolic discrete signal representation.
+- Convolution support.
+- Time-domain transformations: shift, scale, reflect, decimation, insertion of zeros.
+
 ### v2.1.1
 - plot_contolution_results() rewritten with optimized performance and better support estimation.
 
@@ -536,7 +569,7 @@ cp.show("complex_plane2.png")
 - ROC, poles, zeros, unit circle, ...
 
 ### v2.0.0 (renamed as SignalBlocks)
-- New module `SignalPlotter` with symbolic signal representation and plotting.
+- New module `SignalPlotter` with symbolic continuous signal representation and plotting.
 - Convolution support (including impulses).
 - Time-domain transformations: shift, scale, reflect.
 - Maintains all features from v1.x of DiagramBuilder.
@@ -548,7 +581,7 @@ cp.show("complex_plane2.png")
 
 ## Upcoming Improvements
 
-- Discrete time signals representation.
+- Complete refactory for discrete and continuous signal representation and operation.
 
 ---
 
