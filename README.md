@@ -5,9 +5,12 @@
 
 **SignalBlocks** is a Python library for visualizing and manipulating signals & systems with high-quality export for publication-quality figures.
 
+Version **2.2** introduces full support for symbolic signals in discrete domain.
+
+Version **2.1** allows to represent complex plane poles, zeros, ROCs of Z transforms.
+
 Version **2.0** introduces full support for symbolic signal definitions, time-domain operations (shifting, scaling, convolution), and automatic plotting of both continuous and impulsive components. It also maintains backward compatibility with all previous block diagram features.
 
-Version **2.1** allows to represent comple plane poles, zeros, ROCs of Z transforms.
 
 ---
 
@@ -27,7 +30,7 @@ Version **2.1** allows to represent comple plane poles, zeros, ROCs of Z transfo
 - Convolution visualization: step-by-step and final result.
 - Periodic extensions and delta scaling support.
 
-### 📈 Discrete Signal Plotting & Symbolic Operations
+### 🔢 Discrete Signal Plotting & Symbolic Operations
 - Define signals symbolically: `"x[n]=sin(pi*n/2)"`, `"x[n]=2*delta[n-1]"`, etc.
 - Plot discrete-time signals with arrows, units, and discrete impulses.
 - Built-in primitives: `rect[n]`, `tri[n]`, `ramp[n]`, `delta[n]`, `u[n]`, `sinc[n]`...
