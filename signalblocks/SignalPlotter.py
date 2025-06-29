@@ -80,7 +80,8 @@ class SignalPlotter:
         fraction_ticks=False,
         save_path=None, 
         show_plot=True,
-        color='black', 
+        color='black',
+        linestyle='--', 
         alpha=0.5 
     ):
         """
@@ -88,6 +89,8 @@ class SignalPlotter:
         """
         self.signal_defs = {}
         self.var_symbols = {}
+        self.custom_labels = {}
+        self.signal_periods = {}
         self.current_name = None
         self.horiz_range = horiz_range
         self.vert_range = vert_range
@@ -95,6 +98,7 @@ class SignalPlotter:
         self.figsize = figsize
         self.tick_size_px = tick_size_px
         self.color = color
+        self.linestyle =linestyle
         self.alpha = alpha
         self.period = period
         self.save_path = save_path
@@ -259,16 +263,15 @@ class SignalPlotter:
             >>> sp.add_signal("x5(t) = re(x4(t))", label="\Re\{x_4(t)\}")
             >>> sp.plot('x5')
         """
-        m = re.match(r"^(?P<fn>\w+)\((?P<vr>\w+)\)\s*=\s*(?P<ex>.+)$", expr_str)
 
         replacements = {'\\omega': 'ω', '\\tau': 'τ'}
         for latex_var, unicode_var in replacements.items():
             expr_str = expr_str.replace(latex_var, unicode_var)
-        m = re.match(r"^(?P<fn>\w+)\((?P<vr>\w+)\)\s*=\s*(?P<ex>.+)$", expr_str)
+        m = re.match(r"^(?P<name>\w+)\((?P<var>\w+)\)\s*=\s*(?P<expr>.+)$", expr_str)
 
-        name = m.group('fn')
-        var = m.group('vr')
-        body = m.group('ex')
+        name = m.group('name')
+        var = m.group('var')
+        body = m.group('expr')
 
         if var not in self.var_symbols:
             self.var_symbols[var] = sp.Symbol(var)
@@ -281,6 +284,9 @@ class SignalPlotter:
         transformations = standard_transformations + (implicit_multiplication_application,)
         parsed_expr = parse_expr(body, local_dict=local_dict, transformations=transformations)
 
+        # Perform recursive substitution of previously defined signals.
+        # This enables expressions to reference earlier signals (e.g., x(t) = z(t-2) + delta(t))
+        # by replacing every function call (e.g., z(t-2)) with the corresponding shifted expression.
         for other_name, other_expr in self.signal_defs.items():
             f = sp.Function(other_name)
             matches = parsed_expr.find(f)
@@ -293,14 +299,11 @@ class SignalPlotter:
         self.signal_defs[name] = parsed_expr
         self.var_symbols[name] = var_sym
 
-        if label is not None:
-            if not hasattr(self, 'custom_labels'):
-                self.custom_labels = {}
-            self.custom_labels[name] = label
+        # Assign custom label if argument is given
+        self.custom_labels[name] = label
 
         if period is not None:
-            if not hasattr(self, 'signal_periods'):
-                self.signal_periods = {}
+            # Assign period of signal if given
             self.signal_periods[name] = period
 
             # Expand signal as sum of shifts within range
@@ -386,7 +389,7 @@ class SignalPlotter:
             self.y_min, self.y_max = -1, 1
 
 
-    def _eval_func_array(self, t):
+    def _evaluate_signal(self, t):
         """
         (Private) Evaluates the continuous (non-impulsive) part of the signal at the given time values.
         Notes:
@@ -402,7 +405,7 @@ class SignalPlotter:
 
         Examples:
             >>> t_vals = np.linspace(-1, 1, 100)
-            >>> y_vals = self._eval_func_array(t_vals)
+            >>> y_vals = self._evaluate_signal(t_vals)
         """
         y = self.func(t)
         return np.full_like(t, y, dtype=float) if np.isscalar(y) else np.array(y, dtype=float)
@@ -525,7 +528,7 @@ class SignalPlotter:
 
         t0, t1 = horiz_range
         t_plot = self.t_vals
-        y_plot = self._eval_func_array(t_plot)
+        y_plot = self._evaluate_signal(t_plot)
 
         # Assure arrays and format
         t_plot = np.array(t_plot)
@@ -534,7 +537,7 @@ class SignalPlotter:
             y_plot = np.full_like(t_plot, y_plot, dtype=float)
 
         # Plot curve
-        self.ax.plot(t_plot, y_plot, color=self.color, linewidth=2.5, zorder=5)
+        self.ax.plot(t_plot, y_plot, color=self.color, linewidth=2.5, linestyle=self.linestyle, zorder=5)
 
         # Decide whether to draw ellipsis
         delta = (t1 - t0) * 0.05
@@ -542,18 +545,18 @@ class SignalPlotter:
         span = t1 - t0
         draw_left = draw_right = False
 
-        # Show alwais if periodic
+        # Show always if periodic
         if hasattr(self, 'signal_periods') and self.current_name in self.signal_periods:
             draw_left = draw_right = True
         else:
             N = max(10, int(0.05 * self.num_points))
             xs_left = np.linspace(t0 - 0.05 * span, t0, N)
-            ys_left = np.abs(self._eval_func_array(xs_left))
+            ys_left = np.abs(self._evaluate_signal(xs_left))
             if np.trapz(ys_left, xs_left) > tol:
                 draw_left = True
 
             xs_right = np.linspace(t1, t1 + 0.05 * span, N)
-            ys_right = np.abs(self._eval_func_array(xs_right))
+            ys_right = np.abs(self._evaluate_signal(xs_right))
             if np.trapz(ys_right, xs_right) > tol:
                 draw_right = True
 
@@ -718,7 +721,7 @@ class SignalPlotter:
                          arrowprops=dict(arrowstyle='-|>', linewidth=1.5, color='black',
                                          mutation_scale=16, mutation_aspect=0.8, fc='black'))
 
-        # Draw x-axis arrow
+        # Draw y-axis arrow
         self.ax.annotate('', xy=(0, self.ax.get_ylim()[1]), xytext=(0, self.ax.get_ylim()[0]),
                          arrowprops=dict(arrowstyle='-|>', linewidth=1.5, color='black',
                                          mutation_scale=12, mutation_aspect=2, fc='black'))
@@ -1243,8 +1246,10 @@ class SignalPlotter:
             # Set axis labels
             self.xlabel = str(var)
             self.ylabel = f"{self.func_name}({self.xlabel})"
+
             if hasattr(self, 'custom_labels') and self.func_name in self.custom_labels:
-                self.ylabel = self.custom_labels[self.func_name]
+                if self.custom_labels[self.func_name] is not None:
+                    self.ylabel = self.custom_labels[self.func_name]
 
             # Time discretization for plotting
             self.t_vals = np.linspace(*self.horiz_range, self.num_points)
@@ -1551,7 +1556,7 @@ class SignalPlotter:
         return (t_vals[min_index], t_vals[max_index])
 
 
-    def plot_convolution_result(self, x_name, h_name, num_points=None, show_expr=False):
+    def plot_convolution(self, x_name, h_name, num_points=None, show_expr=False):
         """
         Compute and plot the convolution result y(t) = (x * h)(t) between two signals x(t) and h(t).
 
@@ -1575,8 +1580,8 @@ class SignalPlotter:
 
         Examples
         --------
-        >>> sp.plot_convolution_result("x", "h", method='fast')
-        >>> sp.plot_convolution_result("x", "h", method='precise')
+        >>> sp.plot_convolution("x", "h", method='fast')
+        >>> sp.plot_convolution("x", "h", method='precise')
         """
 
         t = sp.Symbol('t')
@@ -1752,7 +1757,7 @@ class SignalPlotter:
     #     t0, t1 = self.horiz_range
     #     if self.period is None:
     #         t_plot = self.t_vals
-    #         y_plot = self._eval_func_array(t_plot)
+    #         y_plot = self._evaluate_signal(t_plot)
     #     else:
     #         T = self.period
     #         base_t = np.linspace(-T/2, T/2, self.num_points)
