@@ -25,7 +25,7 @@ from fractions import Fraction
 import warnings
 from scipy import integrate
 
-class SignalPlotter:
+class ContinuousSignalPlotter:
     """
     A helper class to plot signals y a minimalistic way. It has predefined
     typical signals, like rect, tri, Heaviside, delta, sinc, ...
@@ -324,6 +324,7 @@ class SignalPlotter:
         self.func = sp.lambdify(var_sym, parsed_expr, modules=["numpy", local_dict])
         self.current_name = name
 
+
     def _prepare_plot(self):
         """
         (Private) Determines the vertical plotting range (y-axis limits) based on the signal values. 
@@ -443,7 +444,6 @@ class SignalPlotter:
         # Expandir y descomponer en términos
         expr = self.signal_defs[self.current_name]
         expr_terms = expr.expand().as_ordered_terms()
-
 
         for term in expr_terms:
             deltas = term.atoms(sp.DiracDelta)
@@ -1748,7 +1748,7 @@ class SignalPlotter:
             self.signal_defs["y"] = self.expr
         self.var_symbols["y"] = sp.Symbol("t", real=True)
         self.current_name = "y"
-        
+
         if show:
             self._setup_figure()
             self.setup_axes()

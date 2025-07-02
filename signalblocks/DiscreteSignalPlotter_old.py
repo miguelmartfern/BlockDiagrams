@@ -6,7 +6,7 @@ import re
 import warnings
 from matplotlib.widgets import Slider
 
-class DiscreteSignalPlotter:
+class DiscreteSignalPlotterOld:
     """
     Class for symbolic definition and plotting of discrete-time signals.
     """
@@ -438,6 +438,7 @@ class DiscreteSignalPlotter:
         Lambdify the symbolic expression and evaluate over self.n_vals.
         """
         n_vals = np.arange(self.horiz_range[0], self.horiz_range[1] + 1)
+        print(n_vals)
         f_lamb = sp.lambdify(self.n, expr, modules=["numpy", self.local_dict])
         try:
             y_vals = np.array(f_lamb(n_vals), dtype=float)
